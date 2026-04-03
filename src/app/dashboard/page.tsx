@@ -1,30 +1,11 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStore } from '../../store/store';
 import { API_BASE } from '../../lib/api';
 
-type UserBetRow = {
-  id: string;
-  matchId: string;
-  match: { teamA: string; teamB: string; status: string } | null;
-  type: string;
-  predictionValue: string;
-  amountStaked: number;
-  multiplier: number;
-  comboMultiplier: number;
-  status: string;
-  payoutCoins: number | null;
-  createdAt: string;
-  updatedAt?: string;
-};
-
 export default function Dashboard() {
   const { user, token } = useStore();
-  const [myBets, setMyBets] = useState<UserBetRow[]>([]);
-  const [betsLoading, setBetsLoading] = useState(false);
-  const [betsError, setBetsError] = useState<string | null>(null);
-  const betsSilentRefresh = useRef(false);
   const [matches, setMatches] = useState<
     Array<{
       _id: string;
@@ -66,58 +47,6 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, [token]);
 
-  useEffect(() => {
-    if (!token) {
-      setMyBets([]);
-      betsSilentRefresh.current = false;
-      return;
-    }
-    betsSilentRefresh.current = false;
-    let cancelled = false;
-    const loadBets = () => {
-      setBetsLoading(!betsSilentRefresh.current);
-      fetch(`${API_BASE}/predictions/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
-        })
-        .then((data: UserBetRow[]) => {
-          if (cancelled) return;
-          setMyBets(Array.isArray(data) ? data : []);
-          setBetsError(null);
-        })
-        .catch(() => {
-          if (cancelled) return;
-          setBetsError('Could not load your bet history.');
-        })
-        .finally(() => {
-          if (cancelled) return;
-          setBetsLoading(false);
-          betsSilentRefresh.current = true;
-        });
-    };
-    loadBets();
-    const bt = setInterval(loadBets, 30000);
-    return () => {
-      cancelled = true;
-      clearInterval(bt);
-    };
-  }, [token]);
-
-  const betStats = useMemo(() => {
-    let won = 0;
-    let lost = 0;
-    let pending = 0;
-    for (const b of myBets) {
-      if (b.status === 'won') won += 1;
-      else if (b.status === 'lost') lost += 1;
-      else pending += 1;
-    }
-    return { won, lost, pending };
-  }, [myBets]);
-
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6 md:p-12">
       <div className="max-w-6xl mx-auto">
@@ -139,124 +68,6 @@ export default function Dashboard() {
              </div>
           </div>
         </header>
-
-        {token && (
-          <section className="mb-12 rounded-3xl border border-gray-700/60 bg-gray-800/40 overflow-hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-6 py-5 border-b border-gray-700/50">
-              <div>
-                <h2 className="text-xl font-black text-white">Your bets</h2>
-                <p className="text-sm text-gray-400 mt-1">
-                  Wins, losses, and open bets across all matches
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3 text-sm">
-                <span className="rounded-full bg-emerald-500/15 text-emerald-300 px-3 py-1.5 border border-emerald-500/25 font-semibold">
-                  Won {betStats.won}
-                </span>
-                <span className="rounded-full bg-red-500/15 text-red-300 px-3 py-1.5 border border-red-500/25 font-semibold">
-                  Lost {betStats.lost}
-                </span>
-                <span className="rounded-full bg-amber-500/15 text-amber-200 px-3 py-1.5 border border-amber-500/25 font-semibold">
-                  Pending {betStats.pending}
-                </span>
-              </div>
-            </div>
-            {betsError && (
-              <div className="mx-6 mt-4 rounded-xl border border-amber-600/40 bg-amber-950/30 px-4 py-2 text-amber-100 text-sm">
-                {betsError}
-              </div>
-            )}
-            {betsLoading && myBets.length === 0 && !betsError ? (
-              <div className="px-6 py-12 text-center text-gray-500 text-sm">Loading your bets…</div>
-            ) : myBets.length === 0 && !betsError ? (
-              <div className="px-6 py-10 text-center text-gray-500 text-sm">
-                No bets yet. Join a live match and place a prediction.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm min-w-[720px]">
-                  <thead>
-                    <tr className="border-b border-gray-700/60 text-gray-500 uppercase tracking-wide text-xs">
-                      <th className="px-6 py-3 font-semibold">When</th>
-                      <th className="px-4 py-3 font-semibold">Match</th>
-                      <th className="px-4 py-3 font-semibold">Type</th>
-                      <th className="px-4 py-3 font-semibold">Pick</th>
-                      <th className="px-4 py-3 font-semibold text-right">Stake</th>
-                      <th className="px-4 py-3 font-semibold text-right">Odds</th>
-                      <th className="px-4 py-3 font-semibold">Result</th>
-                      <th className="px-6 py-3 font-semibold text-right">Coins</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-700/40">
-                    {myBets.map((b) => {
-                      const when = b.createdAt
-                        ? new Date(b.createdAt).toLocaleString(undefined, {
-                            dateStyle: 'short',
-                            timeStyle: 'short',
-                          })
-                        : '—';
-                      const matchLabel = b.match
-                        ? `${b.match.teamA} vs ${b.match.teamB}`
-                        : 'Match';
-                      const resultBadge =
-                        b.status === 'won' ? (
-                          <span className="inline-flex items-center rounded-full bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 text-xs font-bold border border-emerald-500/30">
-                            Win
-                          </span>
-                        ) : b.status === 'lost' ? (
-                          <span className="inline-flex items-center rounded-full bg-red-500/20 text-red-300 px-2.5 py-0.5 text-xs font-bold border border-red-500/30">
-                            Loss
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-amber-500/20 text-amber-200 px-2.5 py-0.5 text-xs font-bold border border-amber-500/30">
-                            Pending
-                          </span>
-                        );
-                      const coinsCell =
-                        b.status === 'won' && b.payoutCoins != null ? (
-                          <span className="text-emerald-400 font-mono font-bold">
-                            +{b.payoutCoins.toLocaleString()}
-                          </span>
-                        ) : b.status === 'lost' ? (
-                          <span className="text-red-400/90 font-mono font-bold">
-                            −{b.amountStaked.toLocaleString()}
-                          </span>
-                        ) : (
-                          <span className="text-gray-500 font-mono">—</span>
-                        );
-                      return (
-                        <tr key={b.id} className="hover:bg-gray-800/50">
-                          <td className="px-6 py-3.5 text-gray-400 whitespace-nowrap">{when}</td>
-                          <td className="px-4 py-3.5">
-                            <Link
-                              href={`/matches/${b.matchId}`}
-                              className="text-indigo-300 hover:text-indigo-200 font-medium underline-offset-2 hover:underline"
-                            >
-                              {matchLabel}
-                            </Link>
-                          </td>
-                          <td className="px-4 py-3.5 text-gray-300 capitalize">{b.type}</td>
-                          <td className="px-4 py-3.5 text-white font-medium">{b.predictionValue}</td>
-                          <td className="px-4 py-3.5 text-right font-mono text-gray-200">
-                            {b.amountStaked.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3.5 text-right font-mono text-gray-400">
-                            {b.multiplier.toFixed(2)}×
-                            {b.comboMultiplier > 1 && (
-                              <span className="text-amber-400/90"> · {b.comboMultiplier.toFixed(1)}× combo</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3.5">{resultBadge}</td>
-                          <td className="px-6 py-3.5 text-right">{coinsCell}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        )}
 
         <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
           <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>
