@@ -1,77 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
 
-/** Lock betting this many ms before we expect the next ball (15s). */
-export const LOCK_BEFORE_NEXT_BALL_MS = 15_000;
+/** After the feed advances to a new ball, users have this many seconds to bet. */
+export const BALL_BET_WINDOW_SECONDS = 15;
 
-/** Default gap if we have no samples yet. */
-export const DEFAULT_EXPECTED_GAP_MS = 30_000;
-
-const MIN_SAMPLE_GAP_MS = 5_000;
-const MAX_SAMPLE_GAP_MS = 180_000;
-
-/** Floor so there is always a short open window after each ball. */
-const MIN_EFFECTIVE_GAP_MS = 20_000;
-
-const MAX_SAMPLES = 10;
-
-function mean(nums: number[]): number {
-  if (!nums.length) return DEFAULT_EXPECTED_GAP_MS;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
-}
-
-function effectiveGapMs(
-  intervals: number[],
-  serverAvgMs: number | null | undefined,
-): number {
-  if (intervals.length > 0) {
-    return Math.max(mean(intervals), MIN_EFFECTIVE_GAP_MS);
-  }
-  const base = serverAvgMs ?? DEFAULT_EXPECTED_GAP_MS;
-  return Math.max(base, MIN_EFFECTIVE_GAP_MS);
-}
+const BALL_BET_WINDOW_MS = BALL_BET_WINDOW_SECONDS * 1000;
 
 /**
- * Betting window: learns gaps from live co/cb changes, and uses server-computed
- * `avgBallIntervalMs` (from Ball.createdAt in DB) + `lastBallRecordedAt` when available.
+ * Ball betting: when the live feed updates current over/ball (delivery in progress),
+ * open betting for a fixed window, then close until the next feed update.
  */
 export function useBallBettingWindow(
   currentOver: number,
   currentBall: number,
   enabled: boolean,
   matchId: string,
-  /** Mean ms between balls from backend (last ~24 deliveries). */
-  serverAvgBallIntervalMs?: number | null,
-  /** ISO time of latest Ball row — syncs schedule to server. */
-  lastBallRecordedAt?: string | null,
 ) {
-  const intervalsRef = useRef<number[]>([]);
-  const lastBallTsRef = useRef<number>(Date.now());
   const lastPhaseRef = useRef<{ o: number; b: number } | null>(null);
-  const lockAtRef = useRef<number>(Date.now() + DEFAULT_EXPECTED_GAP_MS - LOCK_BEFORE_NEXT_BALL_MS);
-
+  const betOpenUntilRef = useRef<number>(0);
   const [, setTick] = useState(0);
 
   useEffect(() => {
-    intervalsRef.current = [];
     lastPhaseRef.current = null;
-    lastBallTsRef.current = Date.now();
-    lockAtRef.current = Date.now() + DEFAULT_EXPECTED_GAP_MS - LOCK_BEFORE_NEXT_BALL_MS;
+    betOpenUntilRef.current = 0;
   }, [matchId]);
 
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, []);
-
-  /** Re-anchor from server timestamps / DB average (poll + socket). */
-  useEffect(() => {
-    if (!enabled) return;
-    const gap = effectiveGapMs(intervalsRef.current, serverAvgBallIntervalMs);
-    if (lastBallRecordedAt) {
-      lastBallTsRef.current = new Date(lastBallRecordedAt).getTime();
-    }
-    lockAtRef.current = lastBallTsRef.current + gap - LOCK_BEFORE_NEXT_BALL_MS;
-  }, [lastBallRecordedAt, serverAvgBallIntervalMs, enabled]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -82,32 +38,9 @@ export function useBallBettingWindow(
     }
 
     const now = Date.now();
-
-    if (prev === null) {
-      lastBallTsRef.current = lastBallRecordedAt
-        ? new Date(lastBallRecordedAt).getTime()
-        : now;
-      const gap = effectiveGapMs(intervalsRef.current, serverAvgBallIntervalMs);
-      lockAtRef.current = lastBallTsRef.current + gap - LOCK_BEFORE_NEXT_BALL_MS;
-      lastPhaseRef.current = { o: currentOver, b: currentBall };
-      return;
-    }
-
-    if (lastBallTsRef.current > 0) {
-      const rawGap = now - lastBallTsRef.current;
-      if (rawGap >= MIN_SAMPLE_GAP_MS && rawGap <= MAX_SAMPLE_GAP_MS) {
-        intervalsRef.current.push(rawGap);
-        while (intervalsRef.current.length > MAX_SAMPLES) {
-          intervalsRef.current.shift();
-        }
-      }
-    }
-
-    lastBallTsRef.current = now;
-    const gap = effectiveGapMs(intervalsRef.current, serverAvgBallIntervalMs);
-    lockAtRef.current = now + gap - LOCK_BEFORE_NEXT_BALL_MS;
+    betOpenUntilRef.current = now + BALL_BET_WINDOW_MS;
     lastPhaseRef.current = { o: currentOver, b: currentBall };
-  }, [currentOver, currentBall, enabled, lastBallRecordedAt, serverAvgBallIntervalMs]);
+  }, [currentOver, currentBall, enabled]);
 
   useEffect(() => {
     if (!enabled) {
@@ -116,30 +49,17 @@ export function useBallBettingWindow(
   }, [enabled]);
 
   const now = Date.now();
-  const lockAt = lockAtRef.current;
-  const bettingOpen = enabled ? now < lockAt : false;
+  const bettingOpen = enabled && now < betOpenUntilRef.current;
+  const lockedWaitingForBall = enabled && !bettingOpen;
 
-  const gapMs = effectiveGapMs(intervalsRef.current, serverAvgBallIntervalMs);
-  const secondsToExpectedNextBall = Math.max(
+  const secondsLeftInWindow = Math.max(
     0,
-    Math.floor((lastBallTsRef.current + gapMs - now) / 1000),
+    Math.floor((betOpenUntilRef.current - now) / 1000),
   );
-  const secondsUntilLock = Math.max(0, Math.floor((lockAt - now) / 1000));
-
-  const avgSource: 'live' | 'database' | 'default' =
-    intervalsRef.current.length > 0
-      ? 'live'
-      : serverAvgBallIntervalMs != null && serverAvgBallIntervalMs > 0
-        ? 'database'
-        : 'default';
 
   return {
     bettingOpen,
-    lockedWaitingForBall: enabled && !bettingOpen,
-    avgSecondsBetweenBalls: Math.round(gapMs / 1000),
-    avgSource,
-    sampleCount: intervalsRef.current.length,
-    secondsUntilLock: bettingOpen ? secondsUntilLock : 0,
-    nextBallInSeconds: secondsToExpectedNextBall,
+    lockedWaitingForBall,
+    secondsLeftInWindow,
   };
 }

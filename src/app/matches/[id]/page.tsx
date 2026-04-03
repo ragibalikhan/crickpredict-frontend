@@ -186,8 +186,6 @@ export default function MatchPage() {
     displayMatch?.currentBall ?? 0,
     matchLoad === 'ok' && displayMatch?.status === 'live',
     matchId,
-    displayMatch?.avgBallIntervalMs,
-    displayMatch?.lastBallRecordedAt,
   );
   const overTimer = useOverBettingCountdown(overPhaseKey);
 
@@ -218,11 +216,7 @@ export default function MatchPage() {
             : 'Betting window for the next over is closed — wait for the next cycle.',
         );
       } else {
-        alert(
-          ballBet.lockedWaitingForBall
-            ? 'Betting is closed until this ball is completed (live feed).'
-            : 'Betting is closed — the window opens after each ball until 15 seconds before the next expected ball.',
-        );
+        alert('Betting is closed until the next ball is released on the live feed (then you get 15 seconds to bet).');
       }
       return;
     }
@@ -523,9 +517,9 @@ export default function MatchPage() {
                 >
                   {isOverTab
                     ? String(overTimer.secondsLeft).padStart(2, '0')
-                    : String(
-                        ballBet.bettingOpen ? ballBet.secondsUntilLock : ballBet.nextBallInSeconds,
-                      ).padStart(2, '0')}
+                    : ballBet.bettingOpen
+                      ? String(ballBet.secondsLeftInWindow).padStart(2, '0')
+                      : '—'}
                 </div>
                 <div>
                   {isOverTab ? (
@@ -552,18 +546,12 @@ export default function MatchPage() {
                           ballBet.bettingOpen ? 'text-emerald-300' : 'text-amber-200'
                         }`}
                       >
-                        {ballBet.bettingOpen ? 'Place your bet' : 'Locked — waiting for ball result'}
+                        {ballBet.bettingOpen ? 'Place your bet' : 'Session closed — wait for next ball'}
                       </p>
                       <p className="text-sm text-gray-400">
                         {ballBet.bettingOpen
-                          ? `Avg gap ~${ballBet.avgSecondsBetweenBalls}s${
-                              ballBet.avgSource === 'database'
-                                ? ' (from recorded balls in DB)'
-                                : ballBet.avgSource === 'live'
-                                  ? ' (from your session timings)'
-                                  : ' (default until data exists)'
-                            } · lock in ${ballBet.secondsUntilLock}s (15s before next ball) · ~${ballBet.nextBallInSeconds}s to next ball`
-                          : `Betting stays closed until the feed shows the next ball (~${ballBet.nextBallInSeconds}s).`}
+                          ? `You have ${ballBet.secondsLeftInWindow}s left — betting closes when this window ends.`
+                          : 'When the live feed advances to the next ball, a new 15s betting window opens.'}
                       </p>
                     </>
                   )}
