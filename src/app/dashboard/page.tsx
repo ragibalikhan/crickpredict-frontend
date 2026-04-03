@@ -62,7 +62,7 @@ export default function Dashboard() {
           );
         });
     load();
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 2000);
     return () => clearInterval(t);
   }, [token]);
 
@@ -273,7 +273,7 @@ export default function Dashboard() {
            <div className="text-center p-12 bg-gray-800/50 rounded-3xl border border-gray-700/50 border-dashed">
              <p className="text-gray-400 mb-2">No matches synced yet.</p>
              <p className="text-gray-600 text-sm max-w-md mx-auto">
-               Ensure the backend is running with MongoDB. The IPL poller fills this list from CricAPI or the Cricbuzz scraper (every ~15s).
+               Ensure the backend is running with MongoDB. The IPL poller fills this list from CricAPI or the Cricbuzz scraper (about every 2s).
              </p>
            </div>
         ) : matches.length === 0 ? null : (

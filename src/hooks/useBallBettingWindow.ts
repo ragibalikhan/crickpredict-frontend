@@ -6,8 +6,9 @@ export const BALL_BET_WINDOW_SECONDS = 15;
 const BALL_BET_WINDOW_MS = BALL_BET_WINDOW_SECONDS * 1000;
 
 /**
- * Ball betting: when the live feed updates current over/ball (delivery in progress),
- * open betting for a fixed window, then close until the next feed update.
+ * Ball betting: when the live feed **advances** over/ball vs what we last saw,
+ * open a fixed window. Initial page load / refresh only records the current phase
+ * (no free 15s — avoids resetting the window on every reload).
  */
 export function useBallBettingWindow(
   currentOver: number,
@@ -34,6 +35,12 @@ export function useBallBettingWindow(
 
     const prev = lastPhaseRef.current;
     if (prev !== null && prev.o === currentOver && prev.b === currentBall) {
+      return;
+    }
+
+    if (prev === null) {
+      // First tick after mount / match change / going live: sync phase, stay locked.
+      lastPhaseRef.current = { o: currentOver, b: currentBall };
       return;
     }
 

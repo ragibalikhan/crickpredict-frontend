@@ -10,7 +10,8 @@ type Tab =
   | 'deposits'
   | 'withdrawals'
   | 'accounts'
-  | 'notify';
+  | 'notify'
+  | 'multipliers';
 
 export default function AdminPage() {
   const { token, user } = useStore();
@@ -34,6 +35,14 @@ export default function AdminPage() {
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
 
   const [coinRateDraft, setCoinRateDraft] = useState('');
+  const [ballMultiplierDraft, setBallMultiplierDraft] = useState<Record<string, string>>({
+    Dot: '1.5',
+    '1-2 Runs': '2.0',
+    '4 Runs': '3.0',
+    '6 Runs': '4.0',
+    Wicket: '5.0',
+    Extras: '2.0',
+  });
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({ coinsBalance: '', creditsBalance: '', note: '' });
 
@@ -66,6 +75,21 @@ export default function AdminPage() {
       setStats(s);
       if (s.coinsPerInr != null) setCoinRateDraft(String(s.coinsPerInr));
     }
+  }, [token]);
+
+  const fetchBallMultipliers = useCallback(async () => {
+    const res = await fetch(`${API_BASE}/admin/settings/ball-multipliers`, { headers });
+    if (!res.ok) return;
+    const d = await res.json();
+    const bm = d.ballMultipliers || {};
+    setBallMultiplierDraft({
+      Dot: String(bm.Dot ?? 1.5),
+      '1-2 Runs': String(bm['1-2 Runs'] ?? 2.0),
+      '4 Runs': String(bm['4 Runs'] ?? 3.0),
+      '6 Runs': String(bm['6 Runs'] ?? 4.0),
+      Wicket: String(bm.Wicket ?? 5.0),
+      Extras: String(bm.Extras ?? 2.0),
+    });
   }, [token]);
 
   const fetchUsers = useCallback(async () => {
@@ -108,6 +132,7 @@ export default function AdminPage() {
     if (activeTab === 'withdrawals') fetchWithdrawals();
     if (activeTab === 'deposits') fetchDeposits();
     if (activeTab === 'accounts') fetchAccounts();
+    if (activeTab === 'multipliers') fetchBallMultipliers();
   }, [activeTab, token]);
 
   const saveCoinRate = async () => {
@@ -122,6 +147,32 @@ export default function AdminPage() {
     if (res.ok) {
       showToast('Coin rate updated');
       fetchStats();
+    } else {
+      const d = await res.json();
+      showToast(d.message || 'Failed', 'error');
+    }
+    setActionLoading(null);
+  };
+
+  const saveBallMultipliers = async () => {
+    const payload: Record<string, number> = {};
+    for (const [k, v] of Object.entries(ballMultiplierDraft)) {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n <= 0 || n > 1000) {
+        return showToast(`Invalid multiplier for ${k}`, 'error');
+      }
+      payload[k] = n;
+    }
+
+    setActionLoading('ballMultipliers');
+    const res = await fetch(`${API_BASE}/admin/settings/ball-multipliers`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ ballMultipliers: payload }),
+    });
+    if (res.ok) {
+      showToast('Ball multipliers updated');
+      fetchBallMultipliers();
     } else {
       const d = await res.json();
       showToast(d.message || 'Failed', 'error');
@@ -357,6 +408,7 @@ export default function AdminPage() {
     { id: 'deposits', label: 'INR deposits', icon: '💰', badge: stats?.pendingDeposits },
     { id: 'withdrawals', label: 'Withdrawals', icon: '💸', badge: stats?.pendingWithdrawals },
     { id: 'accounts', label: 'Payment accounts', icon: '🏦' },
+    { id: 'multipliers', label: 'Game Multipliers', icon: '🎯' },
     { id: 'notify', label: 'Notify Users', icon: '🔔' },
   ];
 
@@ -980,6 +1032,69 @@ export default function AdminPage() {
                 {accounts.length === 0 && <p className="text-gray-500 text-center py-8">No payment accounts yet. Add one above.</p>}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'multipliers' && (
+          <div className="max-w-2xl space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold">Ball Multipliers</h2>
+              <button
+                type="button"
+                onClick={fetchBallMultipliers}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm transition"
+              >
+                ↻ Refresh
+              </button>
+            </div>
+
+            <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-8 space-y-5">
+              <p className="text-sm text-gray-400">
+                These multipliers are applied when resolving <code className="text-gray-300">type: 'ball'</code> predictions.
+                Admin can set a fixed value for Dot / 1-2 / 4 / 6 / Wicket / Extras.
+              </p>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                {(
+                  [
+                    { k: 'Dot', label: 'Dot' },
+                    { k: '1-2 Runs', label: '1-2 Runs' },
+                    { k: '4 Runs', label: '4 Runs' },
+                    { k: '6 Runs', label: '6 Runs' },
+                    { k: 'Wicket', label: 'Wicket' },
+                    { k: 'Extras', label: 'Extras' },
+                  ] as const
+                ).map(({ k, label }) => (
+                  <div key={k}>
+                    <label className="block text-xs text-gray-500 mb-2">{label}</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 text-white"
+                      value={ballMultiplierDraft[k]}
+                      onChange={(e) =>
+                        setBallMultiplierDraft((d) => ({
+                          ...d,
+                          [k]: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={actionLoading === 'ballMultipliers'}
+                  onClick={saveBallMultipliers}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold disabled:opacity-50"
+                >
+                  {actionLoading === 'ballMultipliers' ? 'Saving...' : 'Save multipliers'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

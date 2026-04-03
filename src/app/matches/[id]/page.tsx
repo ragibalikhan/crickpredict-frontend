@@ -8,6 +8,9 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { API_BASE } from '../../../lib/api';
 
+/** Poll interval for score + match state (HTTP); socket still pushes faster when connected. */
+const MATCH_POLL_MS = 2000;
+
 type SchedulePayload = {
   nextMatch: {
     _id: string;
@@ -61,7 +64,7 @@ export default function MatchPage() {
         });
     setMatchLoad('loading');
     load();
-    const poll = setInterval(load, 10000);
+    const poll = setInterval(load, MATCH_POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(poll);
@@ -297,7 +300,7 @@ export default function MatchPage() {
               )}
               <span className="text-gray-600">·</span>
               <span className="text-gray-500 text-xs normal-case">
-                {displayMatch.status === 'live' ? 'Scores refresh from IPL feed (~10s)' : 'Fixture synced from feed'}
+                {displayMatch.status === 'live' ? 'Scores refresh every 2s (socket + poll)' : 'Fixture synced from feed'}
               </span>
             </div>
           </div>
