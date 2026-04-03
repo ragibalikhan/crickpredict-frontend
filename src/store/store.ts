@@ -17,9 +17,12 @@ export interface User {
 
 export interface BallSlot {
   ballNumber: number;
+  /** 0 = legal; 1+ = extras (wide/no-ball) on same ball slot */
+  subBallNumber?: number;
   outcome: string;
   runs?: number;
   isWicket?: boolean;
+  createdAt?: string;
 }
 
 export interface MatchState {

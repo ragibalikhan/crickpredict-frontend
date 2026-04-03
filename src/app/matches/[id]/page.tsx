@@ -153,7 +153,10 @@ export default function MatchPage() {
     if (b.isWicket) return 'W';
     if (b.outcome === 'Wicket') return 'W';
     if (b.outcome === 'Dot' || (b.runs === 0 && !b.isWicket)) return '•';
-    if (b.outcome === 'Extras') return 'Nb';
+    if (b.outcome === 'Extras') {
+      if (b.runs != null && b.runs > 1) return `Wd+${b.runs}`;
+      return 'Wd';
+    }
     if (b.runs != null && b.runs > 0) return String(b.runs);
     return b.outcome?.replace(/\s*Runs?$/i, '').slice(0, 4) || '?';
   };
@@ -427,6 +430,9 @@ export default function MatchPage() {
           </p>
           <div className="flex flex-wrap gap-3 mb-3 text-[11px] text-gray-500">
             <span>
+              <span className="inline-block w-3 h-3 rounded bg-orange-600 align-middle mr-1" /> Wd (wide / extras)
+            </span>
+            <span>
               <span className="inline-block w-3 h-3 rounded bg-slate-600 align-middle mr-1" /> Dot
             </span>
             <span>
@@ -444,20 +450,34 @@ export default function MatchPage() {
           </div>
           <div className="grid grid-cols-6 gap-2 md:gap-3">
             {[1, 2, 3, 4, 5, 6].map((slot) => {
-              const ball = ballsThisOver.find((b) => b.ballNumber === slot);
-              const filled = !!ball;
+              const ballsInSlot = ballsThisOver
+                .filter((b) => b.ballNumber === slot)
+                .sort((a, b) => {
+                  const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                  const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                  if (ta !== tb) return ta - tb;
+                  return (a.subBallNumber ?? 0) - (b.subBallNumber ?? 0);
+                });
+              const last = ballsInSlot[ballsInSlot.length - 1];
+              const filled = ballsInSlot.length > 0;
               return (
                 <div
                   key={slot}
                   className={`flex aspect-square flex-col items-center justify-center rounded-2xl border-2 text-center transition duration-300 ${
-                    filled ? ballSlotClass(ball, true) : ballSlotClass(undefined, false)
+                    filled && last ? ballSlotClass(last, true) : ballSlotClass(undefined, false)
                   }`}
                 >
                   <span className="text-[10px] font-bold uppercase tracking-tighter text-gray-500 mb-1">
                     {slot}
                   </span>
-                  <span className="text-lg md:text-2xl font-black tabular-nums leading-none">
-                    {filled ? formatBallChip(ball) : '—'}
+                  <span className="text-sm md:text-xl font-black tabular-nums leading-tight flex flex-col gap-0.5 min-h-[2rem] justify-center">
+                    {filled
+                      ? ballsInSlot.map((b) => (
+                          <span key={`${b.ballNumber}-${b.subBallNumber ?? 0}-${b.createdAt ?? ''}`}>
+                            {formatBallChip(b)}
+                          </span>
+                        ))
+                      : '—'}
                   </span>
                 </div>
               );
