@@ -2,28 +2,54 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store/store';
 
+const SEEN_IDS_KEY = 'crickpredict_toast_seen_ids';
+
+function loadSeenIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(SEEN_IDS_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as string[];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistSeenId(id: string) {
+  const s = loadSeenIds();
+  s.add(id);
+  const capped = [...s].slice(-500);
+  try {
+    localStorage.setItem(SEEN_IDS_KEY, JSON.stringify(capped));
+  } catch {
+    /* ignore quota */
+  }
+}
+
 export default function ToastProvider() {
   const notifications = useStore((s) => s.notifications);
   const [activeToast, setActiveToast] = useState<any>(null);
-  const [lastShownId, setLastShownId] = useState<string | null>(null);
 
   useEffect(() => {
     const latest = notifications[0];
-    if (latest && latest._id !== lastShownId) {
-      // Don't show toast for results that already have a modal (bet settlements)
-      // Actually, maybe show it anyway for consistency, or skip if it's a bet result
-      // Let's show it for everything for now as requested "popup notification"
-      
-      setActiveToast(latest);
-      setLastShownId(latest._id);
+    if (!latest?._id) return;
 
-      const timer = setTimeout(() => {
-        setActiveToast(null);
-      }, 5000);
+    // Only pop up for referral bonus (not admin broadcasts / welcome copy).
+    if (latest.kind !== 'referral_bonus') return;
 
-      return () => clearTimeout(timer);
-    }
-  }, [notifications, lastShownId]);
+    const id = String(latest._id);
+    if (loadSeenIds().has(id)) return;
+
+    persistSeenId(id);
+    setActiveToast(latest);
+
+    const timer = setTimeout(() => {
+      setActiveToast(null);
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [notifications]);
 
   if (!activeToast) return null;
 

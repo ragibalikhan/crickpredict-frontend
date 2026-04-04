@@ -7,7 +7,7 @@ import { useGlobalSocket } from '../hooks/useSocket';
 import { API_BASE } from '../lib/api';
 
 export default function Navbar() {
-  const { user, logout, notifications, markAllRead, token } = useStore();
+  const { user, logout, notifications, markAllRead, token, setNotifications } = useStore();
   const router = useRouter();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
@@ -43,7 +43,7 @@ export default function Navbar() {
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {
-          data.forEach(n => useStore.getState().addNotification(n));
+          setNotifications(data);
         }
       })
       .catch(() => {});

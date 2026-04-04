@@ -102,6 +102,7 @@ interface AppState {
   setPredictionsLocked: (locked: boolean) => void;
   updateBall: (matchData: any) => void;
   addNotification: (notif: any) => void;
+  setNotifications: (list: any[]) => void;
   markAllRead: () => void;
   setBetSettlementResult: (r: BetSettlementResult | null) => void;
 }
@@ -140,7 +141,14 @@ export const useStore = create<AppState>()(
           }
           return state;
         }),
-      addNotification: (notif) => set((state) => ({ notifications: [notif, ...state.notifications].slice(0, 50) })),
+      addNotification: (notif) =>
+        set((state) => {
+          const id = notif?._id != null ? String(notif._id) : '';
+          const rest = id ? state.notifications.filter((n) => String(n._id) !== id) : state.notifications;
+          return { notifications: [notif, ...rest].slice(0, 50) };
+        }),
+      setNotifications: (list) =>
+        set({ notifications: Array.isArray(list) ? list.slice(0, 50) : [] }),
       markAllRead: () => set((state) => ({ notifications: state.notifications.map(n => ({ ...n, read: true })) })),
       setBetSettlementResult: (r) => set({ betSettlementResult: r }),
     }),

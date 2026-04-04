@@ -4,6 +4,18 @@ import { useStore } from '../../store/store';
 import { useRouter } from 'next/navigation';
 import { API_BASE } from '../../lib/api';
 
+const BALL_OUTCOME_ORDER = ['Dot', '1-2 Runs', '4 Runs', '6 Runs', 'Wicket', 'Extras'];
+
+function sortBallOutcomes<T extends { predictionValue: string }>(rows: T[]): T[] {
+  const order = new Map(BALL_OUTCOME_ORDER.map((k, i) => [k, i]));
+  return [...rows].sort((a, b) => {
+    const ia = order.has(a.predictionValue) ? order.get(a.predictionValue)! : 1000;
+    const ib = order.has(b.predictionValue) ? order.get(b.predictionValue)! : 1000;
+    if (ia !== ib) return ia - ib;
+    return a.predictionValue.localeCompare(b.predictionValue);
+  });
+}
+
 type Tab =
   | 'overview'
   | 'users'
@@ -26,6 +38,31 @@ export default function AdminPage() {
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<any>(null);
+  const [matchBetting, setMatchBetting] = useState<
+    Array<{
+      matchId: string;
+      teamA?: string;
+      teamB?: string;
+      matchStatus?: string;
+      totalBets: number;
+      totalStaked: number;
+      wonCount: number;
+      lostCount: number;
+      pendingCount: number;
+      totalWonPayout: number;
+    }>
+  | null>(null);
+  const [betOutcomeStats, setBetOutcomeStats] = useState<{
+    outcomes: Array<{
+      predictionValue: string;
+      totalBets: number;
+      wonCount: number;
+      lostCount: number;
+      pendingCount: number;
+    }>;
+    mostWins: { predictionValue: string; count: number } | null;
+    mostLosses: { predictionValue: string; count: number } | null;
+  } | null>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [deposits, setDeposits] = useState<any[]>([]);
@@ -84,6 +121,16 @@ export default function AdminPage() {
       setStats(s);
       if (s.coinsPerInr != null) setCoinRateDraft(String(s.coinsPerInr));
     }
+  }, [token]);
+
+  const fetchMatchBetting = useCallback(async () => {
+    const res = await fetch(`${API_BASE}/admin/matches/betting-stats`, { headers });
+    if (res.ok) setMatchBetting(await res.json());
+  }, [token]);
+
+  const fetchBetOutcomeStats = useCallback(async () => {
+    const res = await fetch(`${API_BASE}/admin/stats/bet-outcomes`, { headers });
+    if (res.ok) setBetOutcomeStats(await res.json());
   }, [token]);
 
   const fetchBallMultipliers = useCallback(async () => {
@@ -157,7 +204,11 @@ export default function AdminPage() {
     if (activeTab === 'accounts') fetchAccounts();
     if (activeTab === 'multipliers') fetchBallMultipliers();
     if (activeTab === 'bonus') fetchBonusSettings();
-  }, [activeTab, token]);
+    if (activeTab === 'overview') {
+      fetchMatchBetting();
+      fetchBetOutcomeStats();
+    }
+  }, [activeTab, token, fetchMatchBetting, fetchBetOutcomeStats]);
 
   const saveCoinRate = async () => {
     const n = Number(coinRateDraft);
@@ -601,6 +652,135 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+
+            {betOutcomeStats && (
+              <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 overflow-hidden">
+                <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+                  <div>
+                    <h3 className="font-bold text-lg">Ball outcomes (app-wide)</h3>
+                    <p className="text-sm text-gray-400">
+                      Wins and losses by pick (Dot, 1–2 Runs, 4, 6, Wicket, Extras). Settled bets only for win rate.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fetchBetOutcomeStats()}
+                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm"
+                  >
+                    ↻ Refresh
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-3 mb-5">
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-4 py-3 min-w-[200px]">
+                    <p className="text-xs text-emerald-300/80 uppercase tracking-wide font-semibold">Most winning pick</p>
+                    <p className="text-lg font-black text-white mt-1">
+                      {betOutcomeStats.mostWins
+                        ? `${betOutcomeStats.mostWins.predictionValue} · ${betOutcomeStats.mostWins.count} wins`
+                        : '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 min-w-[200px]">
+                    <p className="text-xs text-rose-300/80 uppercase tracking-wide font-semibold">Most losing pick</p>
+                    <p className="text-lg font-black text-white mt-1">
+                      {betOutcomeStats.mostLosses
+                        ? `${betOutcomeStats.mostLosses.predictionValue} · ${betOutcomeStats.mostLosses.count} losses`
+                        : '—'}
+                    </p>
+                  </div>
+                </div>
+
+                {betOutcomeStats.outcomes.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No ball bets recorded yet.</p>
+                ) : (
+                  <div className="overflow-x-auto -mx-2">
+                    <table className="w-full text-sm min-w-[640px]">
+                      <thead>
+                        <tr className="bg-gray-900/50 text-gray-400 text-xs uppercase tracking-wider">
+                          <th className="px-3 py-2 text-left">Outcome</th>
+                          <th className="px-3 py-2 text-right">Bets</th>
+                          <th className="px-3 py-2 text-right">Won</th>
+                          <th className="px-3 py-2 text-right">Lost</th>
+                          <th className="px-3 py-2 text-right">Pending</th>
+                          <th className="px-3 py-2 text-right">Win rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortBallOutcomes(betOutcomeStats.outcomes).map((row) => {
+                          const settled = row.wonCount + row.lostCount;
+                          const winRate = settled > 0 ? Math.round((row.wonCount / settled) * 1000) / 10 : null;
+                          return (
+                            <tr key={row.predictionValue} className="border-t border-gray-700/40">
+                              <td className="px-3 py-2 font-medium text-white">{row.predictionValue}</td>
+                              <td className="px-3 py-2 text-right tabular-nums">{row.totalBets}</td>
+                              <td className="px-3 py-2 text-right text-emerald-400 tabular-nums">{row.wonCount}</td>
+                              <td className="px-3 py-2 text-right text-rose-400 tabular-nums">{row.lostCount}</td>
+                              <td className="px-3 py-2 text-right text-amber-300/90 tabular-nums">{row.pendingCount}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-gray-300">
+                                {winRate != null ? `${winRate}%` : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {matchBetting && matchBetting.length > 0 && (
+              <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 overflow-hidden">
+                <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+                  <div>
+                    <h3 className="font-bold text-lg">Match betting</h3>
+                    <p className="text-sm text-gray-400">Total stakes, wins, and losses per match (includes completed fixtures).</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fetchMatchBetting()}
+                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm"
+                  >
+                    ↻ Refresh
+                  </button>
+                </div>
+                <div className="overflow-x-auto -mx-2">
+                  <table className="w-full text-sm min-w-[720px]">
+                    <thead>
+                      <tr className="bg-gray-900/50 text-gray-400 text-xs uppercase tracking-wider">
+                        <th className="px-3 py-2 text-left">Match</th>
+                        <th className="px-3 py-2 text-left">Status</th>
+                        <th className="px-3 py-2 text-right">Bets</th>
+                        <th className="px-3 py-2 text-right">Staked 🪙</th>
+                        <th className="px-3 py-2 text-right">Won</th>
+                        <th className="px-3 py-2 text-right">Lost</th>
+                        <th className="px-3 py-2 text-right">Pending</th>
+                        <th className="px-3 py-2 text-right">Payout (won)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {matchBetting.map((row) => (
+                        <tr key={String(row.matchId)} className="border-t border-gray-700/40">
+                          <td className="px-3 py-2">
+                            <span className="font-medium text-white">
+                              {row.teamA ?? '—'} vs {row.teamB ?? '—'}
+                            </span>
+                            <div className="text-[10px] text-gray-500 font-mono truncate max-w-[200px]">{String(row.matchId)}</div>
+                          </td>
+                          <td className="px-3 py-2 capitalize text-gray-300">{row.matchStatus ?? '—'}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{row.totalBets}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{row.totalStaked?.toLocaleString?.() ?? row.totalStaked}</td>
+                          <td className="px-3 py-2 text-right text-emerald-400 tabular-nums">{row.wonCount}</td>
+                          <td className="px-3 py-2 text-right text-rose-400 tabular-nums">{row.lostCount}</td>
+                          <td className="px-3 py-2 text-right text-amber-300/90 tabular-nums">{row.pendingCount}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{row.totalWonPayout?.toLocaleString?.() ?? row.totalWonPayout}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 max-w-xl">
               <h3 className="font-bold text-lg mb-1">Coin value (INR)</h3>
