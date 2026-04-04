@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSocket, type MatchBetActivity } from '../../../hooks/useSocket';
 import { useBallBettingWindow } from '../../../hooks/useBallBettingWindow';
 import { useOverBettingCountdown } from '../../../hooks/useOverBettingCountdown';
@@ -7,9 +7,26 @@ import { useStore, type BallSlot } from '../../../store/store';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { API_BASE } from '../../../lib/api';
+import TeamAvatar from '../../../components/TeamAvatar';
+import { clampStakeAmount, MAX_STAKE_COINS, MIN_STAKE_COINS } from '../../../lib/betLimits';
 
 /** Poll interval for score + match state (HTTP); socket still pushes faster when connected. */
 const MATCH_POLL_MS = 2000;
+
+const DEFAULT_BALL_MULTIPLIERS: Record<string, number> = {
+  Dot: 1.5,
+  '1-2 Runs': 2.0,
+  '4 Runs': 3.0,
+  '6 Runs': 4.0,
+  Wicket: 5.0,
+  Extras: 2.0,
+};
+
+function formatMultiplierLabel(n: number | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  const rounded = Math.round(n * 10) / 10;
+  return `${Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)}×`;
+}
 
 type SchedulePayload = {
   nextMatch: {
@@ -36,10 +53,27 @@ export default function MatchPage() {
   const [matchLoad, setMatchLoad] = useState<'loading' | 'ok' | 'error'>('loading');
   const [scheduleInfo, setScheduleInfo] = useState<SchedulePayload | null>(null);
   useSocket(matchId, setBetActivity);
-  const { liveMatch, user, token, setLiveMatch, updateCoins, addNotification, betSettlementResult, setBetSettlementResult } =
-    useStore();
+  const { liveMatch, user, token, setLiveMatch, updateCoins, addNotification } = useStore();
   const [predictionAmount, setPredictionAmount] = useState(10);
   const [activeTab, setActiveTab] = useState<'ball' | 'over' | 'batsman'>('ball');
+  const [gameMultipliers, setGameMultipliers] = useState<{
+    ballMultipliers: Record<string, number>;
+    nonBallMultiplierRange: { min: number; max: number };
+  } | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/predictions/game-multipliers`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { ballMultipliers?: Record<string, number>; nonBallMultiplierRange?: { min: number; max: number } } | null) => {
+        if (data?.ballMultipliers && typeof data.ballMultipliers === 'object') {
+          setGameMultipliers({
+            ballMultipliers: data.ballMultipliers,
+            nonBallMultiplierRange: data.nonBallMultiplierRange ?? { min: 1.5, max: 5.0 },
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!matchId) return;
@@ -104,7 +138,10 @@ export default function MatchPage() {
 
   const placePrediction = async (type: string, value: string) => {
     if (!token) return alert('Please login first to use real coins!');
-    
+
+    const stake = clampStakeAmount(predictionAmount);
+    if (stake !== predictionAmount) setPredictionAmount(stake);
+
     try {
       const res = await fetch(`${API_BASE}/predictions`, {
         method: 'POST',
@@ -116,14 +153,14 @@ export default function MatchPage() {
           matchId,
           type,
           predictionValue: value,
-          amountStaked: predictionAmount
+          amountStaked: stake
         })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && typeof data.coinsBalance === 'number') {
         updateCoins(data.coinsBalance);
         if (data.activity) setBetActivity(data.activity);
-        const msg = `You placed your bet: ${predictionAmount} coins on "${value}"`;
+        const msg = `You placed your bet: ${stake} coins on "${value}"`;
         setToastMsg(msg);
         setBetPlacedPopup(msg);
         addNotification({
@@ -205,6 +242,13 @@ export default function MatchPage() {
   );
   const overTimer = useOverBettingCountdown(overPhaseKey);
 
+  const ballMultiplierMap = useMemo(
+    () => ({ ...DEFAULT_BALL_MULTIPLIERS, ...gameMultipliers?.ballMultipliers }),
+    [gameMultipliers],
+  );
+  const nonBallRange = gameMultipliers?.nonBallMultiplierRange ?? { min: 1.5, max: 5.0 };
+  const nonBallRangeLabel = `${nonBallRange.min}×–${nonBallRange.max}×`;
+
   const isOverTab = activeTab === 'over';
   const matchIsLive = displayMatch?.status === 'live';
   const canPlaceBet = isOverTab
@@ -271,79 +315,95 @@ export default function MatchPage() {
   const shownBowled = Math.max(feedBowled, ballsLogged);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-4 md:p-8 font-sans">
-      <div className="max-w-4xl mx-auto">
-        <header className="flex flex-col md:flex-row justify-between items-center mb-8 bg-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl border border-gray-700/50 relative overflow-hidden">
-          {/* Decorative background elements */}
-          <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-indigo-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
-          <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-emerald-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
-          
-          <div className="z-10 text-center md:text-left mb-4 md:mb-0">
-            <h1 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 tracking-tight">
-              {displayMatch.teamA} <span className="text-white font-light text-2xl mx-2">vs</span> {displayMatch.teamB}
-            </h1>
-            <div className="text-gray-400 mt-2 font-mono flex items-center justify-center md:justify-start gap-2 flex-wrap">
-              {displayMatch.status === 'live' && (
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
-              )}
-              {displayMatch.status === 'completed' && (
-                <span className="w-2 h-2 rounded-full bg-slate-500 shrink-0" />
-              )}
-              {displayMatch.status === 'upcoming' && (
-                <span className="w-2 h-2 rounded-full bg-sky-500 shrink-0" />
-              )}
-              <span className="capitalize">
-                {displayMatch.status === 'live'
-                  ? 'Live'
-                  : displayMatch.status === 'upcoming'
-                    ? 'Upcoming'
-                    : displayMatch.status === 'completed'
-                      ? 'Completed'
-                      : displayMatch.status}
-              </span>
-              {displayMatch.completedAt && (
-                <span className="text-gray-500 text-xs normal-case">
-                  · Ended {new Date(displayMatch.completedAt).toLocaleString()}
-                </span>
-              )}
-              {displayMatch.status === 'upcoming' && displayMatch.scheduledStartAt && (
-                <span className="text-sky-300/90 text-xs normal-case">
-                  · Starts {new Date(displayMatch.scheduledStartAt).toLocaleString()}
-                </span>
-              )}
-              <span className="text-gray-600">·</span>
-              <span className="text-gray-500 text-xs normal-case">
-                {displayMatch.status === 'live' ? 'Scores refresh every 2s (socket + poll)' : 'Fixture synced from feed'}
-              </span>
+    <div className="min-h-screen bg-gray-900 text-white px-3 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-4 md:p-8 font-sans touch-manipulation">
+      <div className="max-w-4xl mx-auto w-full min-w-0">
+        <header className="mb-6 sm:mb-8 bg-gray-800 p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl shadow-2xl border border-gray-700/50 relative overflow-hidden">
+          <div className="absolute top-[-40px] right-[-40px] w-40 h-40 bg-indigo-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 pointer-events-none" />
+          <div className="absolute bottom-[-40px] left-[-40px] w-40 h-40 bg-emerald-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col gap-4 sm:gap-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <TeamAvatar teamName={displayMatch.teamA} size={52} className="ring-2 ring-white/10" />
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-lg sm:text-2xl md:text-3xl font-black text-white capitalize truncate leading-tight">
+                    {displayMatch.teamA}
+                  </h1>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap text-[11px] sm:text-xs text-gray-500">
+                    {displayMatch.status === 'live' && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/15 px-2 py-0.5 text-red-300 font-bold uppercase tracking-wide border border-red-500/25">
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                        Live
+                      </span>
+                    )}
+                    {displayMatch.status === 'completed' && (
+                      <span className="text-gray-400 uppercase tracking-wide">Completed</span>
+                    )}
+                    {displayMatch.status === 'upcoming' && (
+                      <span className="text-sky-300 uppercase tracking-wide">Upcoming</span>
+                    )}
+                    {displayMatch.completedAt && (
+                      <span className="text-gray-600 normal-case">
+                        {new Date(displayMatch.completedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="hidden sm:flex items-center justify-center px-3 text-gray-600 font-light text-xl shrink-0">
+                vs
+              </div>
+
+              <div className="flex items-center gap-3 min-w-0 flex-1 sm:flex-row-reverse">
+                <TeamAvatar teamName={displayMatch.teamB} size={52} className="ring-2 ring-white/10" />
+                <div className="min-w-0 flex-1 sm:text-right">
+                  <h1 className="text-lg sm:text-2xl md:text-3xl font-black text-white capitalize truncate leading-tight sm:ml-auto">
+                    {displayMatch.teamB}
+                  </h1>
+                  {displayMatch.status === 'upcoming' && displayMatch.scheduledStartAt && (
+                    <p className="mt-1 text-[11px] text-sky-300/90">
+                      Starts {new Date(displayMatch.scheduledStartAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="z-10 text-center md:text-right bg-gray-900/50 backdrop-blur-sm px-6 py-4 rounded-2xl border border-gray-700/50 shadow-inner min-w-0 max-w-full">
-            <div className="grid grid-cols-2 gap-6 gap-x-8 text-left md:text-right">
-              <div className="min-w-0">
-                <p className="text-xs text-gray-500 tracking-wider mb-1 capitalize truncate">{displayMatch.teamA}</p>
-                <div className="flex items-baseline justify-end gap-1 flex-wrap">
-                  <span className="text-3xl md:text-5xl font-black tabular-nums tracking-tighter text-white">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="flex items-center gap-3 rounded-2xl bg-gray-900/60 border border-gray-700/60 px-3 py-3 sm:p-4 min-w-0">
+                <TeamAvatar teamName={displayMatch.teamA} size={44} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider truncate">
+                    {displayMatch.teamA}
+                  </p>
+                  <p className="text-2xl sm:text-4xl font-black tabular-nums text-white tracking-tight">
                     {displayMatch.scoreA}
-                  </span>
-                  <span className="text-xl md:text-2xl text-gray-500 font-bold">/</span>
-                  <span className="text-2xl md:text-4xl font-black tabular-nums text-red-400">
-                    {displayMatch.wicketsA}
-                  </span>
+                    <span className="text-gray-500 mx-0.5 sm:mx-1">/</span>
+                    <span className="text-red-400">{displayMatch.wicketsA}</span>
+                  </p>
                 </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-xs text-gray-500 tracking-wider mb-1 capitalize truncate">{displayMatch.teamB}</p>
-                <div className="flex items-baseline justify-end gap-1 flex-wrap">
-                  <span className="text-3xl md:text-5xl font-black tabular-nums tracking-tighter text-white">
+              <div className="flex items-center gap-3 rounded-2xl bg-gray-900/60 border border-gray-700/60 px-3 py-3 sm:p-4 min-w-0 flex-row-reverse text-right">
+                <TeamAvatar teamName={displayMatch.teamB} size={44} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider truncate">
+                    {displayMatch.teamB}
+                  </p>
+                  <p className="text-2xl sm:text-4xl font-black tabular-nums text-white tracking-tight">
                     {displayMatch.scoreB}
-                  </span>
-                  <span className="text-xl md:text-2xl text-gray-500 font-bold">/</span>
-                  <span className="text-2xl md:text-4xl font-black tabular-nums text-red-400">
-                    {displayMatch.wicketsB}
-                  </span>
+                    <span className="text-gray-500 mx-0.5 sm:mx-1">/</span>
+                    <span className="text-red-400">{displayMatch.wicketsB}</span>
+                  </p>
                 </div>
               </div>
             </div>
+
+            <p className="text-[11px] text-center sm:text-left text-gray-500">
+              {displayMatch.status === 'live'
+                ? 'Scores refresh every 2s · socket + poll'
+                : 'Fixture synced from feed'}
+            </p>
           </div>
         </header>
 
@@ -492,11 +552,11 @@ export default function MatchPage() {
         </section>
         )}
 
-        <div className="bg-gray-800/80 backdrop-blur-md p-6 md:p-8 rounded-3xl shadow-xl border border-gray-700 mb-8 relative">
+        <div className="bg-gray-800/80 backdrop-blur-md p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl shadow-xl border border-gray-700 mb-8 relative">
           {matchIsLive ? (
           <>
-          <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b border-gray-700/50 pb-6">
-            <h2 className="text-2xl font-bold flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center mb-6 sm:mb-8 gap-4 border-b border-gray-700/50 pb-4 sm:pb-6">
+            <h2 className="text-xl sm:text-2xl font-bold flex flex-wrap items-center gap-2 sm:gap-3">
               <div className="p-2 bg-yellow-500/10 rounded-lg"><span className="text-2xl leading-none">🪙</span></div>
               <span className="text-gray-300">Balance:</span> 
               <span className="text-yellow-400 font-black tabular-nums transition-all duration-300">
@@ -508,25 +568,39 @@ export default function MatchPage() {
                 </span>
               )}
             </h2>
-            <div className="flex items-center gap-4 bg-gray-900/50 py-2 px-4 rounded-xl border border-gray-700/50">
-              <label className="text-gray-400 font-medium">Stake (Coins):</label>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between sm:justify-end gap-2 bg-gray-900/50 py-2.5 px-3 sm:px-4 rounded-xl border border-gray-700/50 w-full sm:w-auto">
+              <label className="text-gray-400 font-medium text-sm sm:text-base shrink-0">Stake (coins)</label>
+              <div className="flex flex-col items-end gap-0.5 w-full sm:w-auto">
               <input 
                 type="number" 
+                min={MIN_STAKE_COINS}
+                max={MAX_STAKE_COINS}
+                step={1}
                 value={predictionAmount} 
-                onChange={e => setPredictionAmount(Number(e.target.value))} 
-                className="bg-gray-700 px-4 py-2 rounded-lg w-28 text-center text-xl font-bold font-mono focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all border border-gray-600" 
+                onChange={(e) => setPredictionAmount(clampStakeAmount(Number(e.target.value)))} 
+                className="bg-gray-700 px-3 sm:px-4 py-2 rounded-lg w-full max-w-[8rem] sm:w-28 text-center text-lg sm:text-xl font-bold font-mono focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all border border-gray-600" 
+                inputMode="numeric"
               />
+              <span className="text-[10px] text-gray-500 text-right w-full sm:w-auto">
+                Min {MIN_STAKE_COINS.toLocaleString()} · Max {MAX_STAKE_COINS.toLocaleString()}
+              </span>
+              </div>
             </div>
           </div>
           
-          <div className="flex justify-between items-end mb-4">
-             <div className="flex gap-2">
-                 <button onClick={() => setActiveTab('ball')} className={`px-4 py-2 font-bold transition rounded-lg ${activeTab === 'ball' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>Ball by Ball</button>
-                 <button onClick={() => setActiveTab('over')} className={`px-4 py-2 font-bold transition rounded-lg ${activeTab === 'over' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>Over Stats</button>
-                 <button onClick={() => setActiveTab('batsman')} className={`px-4 py-2 font-bold transition rounded-lg ${activeTab === 'batsman' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>Batsman Props</button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end mb-3 sm:mb-4">
+             <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                 <button type="button" onClick={() => setActiveTab('ball')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg ${activeTab === 'ball' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>Ball</button>
+                 <button type="button" onClick={() => setActiveTab('over')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg ${activeTab === 'over' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>Over</button>
+                 <button type="button" onClick={() => setActiveTab('batsman')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg ${activeTab === 'batsman' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>Batsman</button>
              </div>
-             <span className="hidden md:inline-block text-sm font-medium text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full border border-emerald-400/20">Up to 5.0x Multiplier</span>
+             <span className="hidden md:inline-block text-sm font-medium text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full border border-emerald-400/20">
+               Over / batsman {nonBallRangeLabel}
+             </span>
           </div>
+          <p className="md:hidden mb-3 text-center text-[11px] text-emerald-400/90">
+            Over &amp; batsman bets use <span className="font-mono font-bold">{nonBallRangeLabel}</span> (set at place)
+          </p>
 
           {!displayMatch?.predictionsLocked && (
             <div
@@ -599,62 +673,120 @@ export default function MatchPage() {
           ) : (
             <div className="mt-6">
               {activeTab === 'ball' && (
-                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                  {[
-                    { label: 'Dot Ball', val: 'Dot', color: 'bg-gray-700 hover:bg-gray-600', text: 'text-gray-300' }, 
-                    { label: 'Single/Double', val: '1-2 Runs', color: 'bg-blue-600 hover:bg-blue-500', text: 'text-white' }, 
-                    { label: 'Boundary (4)', val: '4 Runs', color: 'bg-fuchsia-600 hover:bg-fuchsia-500', text: 'text-white' }, 
-                    { label: 'Six (6)', val: '6 Runs', color: 'bg-purple-600 hover:bg-purple-500', text: 'text-white' }, 
-                    { label: 'Wicket', val: 'Wicket', color: 'bg-red-600 hover:bg-red-500', text: 'text-white' },
-                    { label: 'Wide / No Ball', val: 'Extras', color: 'bg-orange-600 hover:bg-orange-500', text: 'text-white' }
-                  ].map(outcome => (
-                    <button 
-                      key={outcome.val}
-                      onClick={() => placePredictionGuarded('ball', outcome.val)}
-                      disabled={!canPlaceBet}
-                      className={`${outcome.color} ${outcome.text} py-6 rounded-2xl font-black text-xl transition-all transform hover:-translate-y-2 hover:shadow-[0_10px_20px_rgba(0,0,0,0.3)] hover:scale-[1.02] active:scale-[0.98] border border-white/5 flex flex-col items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-40`}
-                    >
-                      <span>{outcome.label}</span>
-                      <span className="text-sm font-normal opacity-70">Predict</span>
-                    </button>
-                  ))}
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
+                  {(
+                    [
+                      {
+                        label: 'Dot Ball',
+                        val: 'Dot',
+                        color: 'bg-gray-700 hover:bg-gray-600',
+                        text: 'text-gray-100',
+                      },
+                      {
+                        label: 'Single/Double',
+                        val: '1-2 Runs',
+                        color: 'bg-blue-600 hover:bg-blue-500',
+                        text: 'text-white',
+                      },
+                      {
+                        label: 'Boundary (4)',
+                        val: '4 Runs',
+                        color: 'bg-fuchsia-600 hover:bg-fuchsia-500',
+                        text: 'text-white',
+                      },
+                      {
+                        label: 'Six (6)',
+                        val: '6 Runs',
+                        color: 'bg-purple-600 hover:bg-purple-500',
+                        text: 'text-white',
+                      },
+                      {
+                        label: 'Wicket',
+                        val: 'Wicket',
+                        color: 'bg-red-600 hover:bg-red-500',
+                        text: 'text-white',
+                      },
+                      {
+                        label: 'Wide / No Ball',
+                        val: 'Extras',
+                        color: 'bg-orange-600 hover:bg-orange-500',
+                        text: 'text-white',
+                      },
+                    ] as const
+                  ).map((outcome) => {
+                    const mx =
+                      ballMultiplierMap[outcome.val] ??
+                      ballMultiplierMap['Dot'] ??
+                      DEFAULT_BALL_MULTIPLIERS.Dot;
+                    return (
+                      <button
+                        key={outcome.val}
+                        type="button"
+                        onClick={() => placePredictionGuarded('ball', outcome.val)}
+                        disabled={!canPlaceBet}
+                        className={`${outcome.color} ${outcome.text} min-h-[5.25rem] sm:min-h-[6.5rem] py-3 sm:py-6 px-2 rounded-xl sm:rounded-2xl font-black text-sm sm:text-lg transition-all sm:hover:-translate-y-1 sm:hover:shadow-[0_10px_20px_rgba(0,0,0,0.3)] active:scale-[0.98] border border-white/10 flex flex-col items-center justify-center gap-1 sm:gap-2 disabled:pointer-events-none disabled:opacity-40`}
+                      >
+                        <span className="text-center leading-snug">{outcome.label}</span>
+                        <span className="inline-flex items-center rounded-full bg-black/25 px-2.5 py-0.5 text-amber-200 font-mono text-xs sm:text-base font-black tabular-nums ring-1 ring-amber-400/30">
+                          {formatMultiplierLabel(mx)}
+                        </span>
+                        <span className="text-[10px] sm:text-xs font-semibold opacity-75 uppercase tracking-wide">
+                          Bet
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
               {activeTab === 'over' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { label: 'Over 10.5 Runs', val: 'Over_10.5', color: 'bg-indigo-600' }, 
-                    { label: 'Under 10.5 Runs', val: 'Under_10.5', color: 'bg-cyan-600' }, 
-                    { label: 'Wicket in Over', val: 'Over_Wicket_Yes', color: 'bg-red-600' }, 
-                    { label: 'Maiden Over', val: 'Over_Maiden', color: 'bg-gray-600' }
-                  ].map(outcome => (
-                    <button 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-4">
+                  {(
+                    [
+                      { label: 'Over 10.5 Runs', val: 'Over_10.5', color: 'bg-indigo-600 hover:brightness-110' },
+                      { label: 'Under 10.5 Runs', val: 'Under_10.5', color: 'bg-cyan-600 hover:brightness-110' },
+                      { label: 'Wicket in Over', val: 'Over_Wicket_Yes', color: 'bg-red-600 hover:brightness-110' },
+                      { label: 'Maiden Over', val: 'Over_Maiden', color: 'bg-gray-600 hover:brightness-110' },
+                    ] as const
+                  ).map((outcome) => (
+                    <button
                       key={outcome.val}
+                      type="button"
                       onClick={() => placePredictionGuarded('over', outcome.val)}
                       disabled={!canPlaceBet}
-                      className={`${outcome.color} text-white hover:brightness-110 py-6 rounded-2xl font-black text-xl transition-all border border-white/10 disabled:pointer-events-none disabled:opacity-40`}
+                      className={`${outcome.color} text-white min-h-[4.75rem] sm:min-h-[5.5rem] py-3 px-3 sm:py-6 rounded-xl sm:rounded-2xl font-black text-base sm:text-xl transition-all border border-white/10 flex flex-col items-center justify-center gap-1 disabled:pointer-events-none disabled:opacity-40 active:scale-[0.98]`}
                     >
-                      {outcome.label}
+                      <span className="text-center leading-tight">{outcome.label}</span>
+                      <span className="inline-flex items-center rounded-full bg-black/25 px-2.5 py-0.5 text-amber-200 font-mono text-xs sm:text-sm font-black tabular-nums ring-1 ring-amber-400/30">
+                        {nonBallRangeLabel}
+                      </span>
+                      <span className="text-[10px] text-white/70 font-medium">Random at place</span>
                     </button>
                   ))}
                 </div>
               )}
 
               {activeTab === 'batsman' && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {[
-                    { label: 'Hit Six Next 5 Balls', val: 'Batsman_Six' }, 
-                    { label: 'Get Out Next 5 Balls', val: 'Batsman_Out' }, 
-                    { label: 'Score 10+ Next 5 Balls', val: 'Batsman_10+' }
-                  ].map(outcome => (
-                    <button 
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
+                  {(
+                    [
+                      { label: 'Hit Six Next 5 Balls', val: 'Batsman_Six' },
+                      { label: 'Get Out Next 5 Balls', val: 'Batsman_Out' },
+                      { label: 'Score 10+ Next 5 Balls', val: 'Batsman_10+' },
+                    ] as const
+                  ).map((outcome) => (
+                    <button
                       key={outcome.val}
+                      type="button"
                       onClick={() => placePredictionGuarded('batsman', outcome.val)}
                       disabled={!canPlaceBet}
-                      className="bg-emerald-600 text-white hover:bg-emerald-500 py-6 px-4 rounded-2xl font-bold text-lg transition-all border border-white/10 disabled:pointer-events-none disabled:opacity-40"
+                      className="bg-emerald-600 text-white hover:bg-emerald-500 min-h-[4.75rem] sm:min-h-[5.5rem] py-3 px-3 sm:py-6 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg transition-all border border-white/10 flex flex-col items-center justify-center gap-1 disabled:pointer-events-none disabled:opacity-40 active:scale-[0.98]"
                     >
-                      {outcome.label}
+                      <span className="text-center leading-snug">{outcome.label}</span>
+                      <span className="inline-flex items-center rounded-full bg-black/25 px-2.5 py-0.5 text-amber-200 font-mono text-xs sm:text-sm font-black tabular-nums ring-1 ring-amber-400/30">
+                        {nonBallRangeLabel}
+                      </span>
+                      <span className="text-[10px] text-emerald-100/80 font-medium">Random at place</span>
                     </button>
                   ))}
                 </div>
@@ -766,54 +898,6 @@ export default function MatchPage() {
               type="button"
               onClick={() => setBetPlacedPopup(null)}
               className="mt-6 w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 py-3 font-bold text-white transition"
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      )}
-
-      {betSettlementResult && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className={`w-full max-w-md rounded-3xl border p-8 shadow-2xl ${
-              betSettlementResult.won
-                ? 'border-emerald-500/40 bg-gray-900'
-                : 'border-amber-600/40 bg-gray-900'
-            }`}
-          >
-            <div className="text-center mb-6">
-              <div className="text-5xl mb-2">{betSettlementResult.won ? '🎉' : '📉'}</div>
-              <h2 className="text-3xl font-black text-white">
-                {betSettlementResult.won ? 'You won the bet!' : 'You lost the bet'}
-              </h2>
-              <p className="text-gray-400 mt-2 text-sm">
-                The result for your {betSettlementResult.predictionType || 'ball'} bet is in — your stake has been settled.
-              </p>
-            </div>
-            <div className="rounded-2xl bg-gray-800/80 border border-gray-700 p-4 space-y-2 text-center font-mono">
-              {betSettlementResult.won ? (
-                <p className="text-emerald-400 text-lg">
-                  +{betSettlementResult.payout.toLocaleString()} <span className="text-yellow-400">🪙</span> paid out
-                </p>
-              ) : (
-                <p className="text-amber-200/90 text-lg">
-                  −{betSettlementResult.stake.toLocaleString()} <span className="text-yellow-400">🪙</span> stake
-                </p>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setBetSettlementResult(null)}
-              className={`mt-8 w-full rounded-2xl py-4 font-black text-lg transition-all shadow-lg hover:shadow-xl active:scale-[0.98] ${
-                betSettlementResult.won
-                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20'
-                  : 'bg-gray-700 hover:bg-gray-600 text-white'
-              }`}
             >
               OK
             </button>

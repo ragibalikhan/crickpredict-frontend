@@ -4,6 +4,15 @@ import type { NextConfig } from "next";
 const backend = process.env.BACKEND_URL || "http://127.0.0.1:3000";
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "upload.wikimedia.org",
+        pathname: "/**",
+      },
+    ],
+  },
   async rewrites() {
     return [
       {

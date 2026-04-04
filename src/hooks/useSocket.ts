@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useStore } from '../store/store';
 import { SOCKET_BASE } from '../lib/api';
+import { handlePredictionResultEvent } from '../lib/predictionResultHandler';
 
 let globalSocket: Socket | null = null;
 let globalSocketUserId: string | null = null;
@@ -44,34 +45,7 @@ export const useGlobalSocket = () => {
       }
     };
 
-    const onPredictionResult = (data: {
-      won: boolean;
-      coinsBalance: number;
-      predictionId: string;
-      stake: number;
-      payout: number;
-      predictionType: string;
-    }) => {
-      useStore.getState().updateCoins(data.coinsBalance);
-      // Show modal for ALL types, not just ball
-      useStore.getState().setBetSettlementResult({
-        won: data.won,
-        stake: data.stake,
-        payout: data.payout,
-        predictionId: data.predictionId,
-        predictionType: data.predictionType,
-      });
-      useStore.getState().addNotification({
-        _id: `pred-result-${data.predictionId}`,
-        title: data.won ? 'You won the bet!' : 'You lost the bet',
-        message: data.won
-          ? `+${data.payout.toLocaleString()} coins credited. New balance: ${data.coinsBalance.toLocaleString()} 🪙`
-          : `Your stake of ${data.stake.toLocaleString()} coins was not returned. Balance: ${data.coinsBalance.toLocaleString()} 🪙`,
-        type: data.won ? 'success' : 'warning',
-        read: false,
-        createdAt: new Date().toISOString(),
-      });
-    };
+    const onPredictionResult = handlePredictionResultEvent;
 
     sock.on('notification', onNotif);
     sock.on('prediction_result', onPredictionResult);
@@ -146,7 +120,10 @@ export const useSocket = (
       onBetActivityRef.current?.(data);
     });
 
+    socket.on('prediction_result', handlePredictionResultEvent);
+
     return () => {
+      socket.off('prediction_result', handlePredictionResultEvent);
       socket.disconnect();
     };
   }, [matchId, user?.id]);
