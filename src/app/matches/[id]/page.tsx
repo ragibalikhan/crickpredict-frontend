@@ -145,6 +145,15 @@ export default function MatchPage() {
   const displayMatch = liveMatch;
 
   const ballsThisOver: BallSlot[] = displayMatch?.ballsThisOver || [];
+  const deliveries = [...ballsThisOver].sort((a, b) => {
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (ta !== tb) return ta - tb;
+    return (a.subBallNumber ?? 0) - (b.subBallNumber ?? 0);
+  });
+  const legalCount = deliveries.filter(b => (b.subBallNumber ?? 0) === 0).length;
+  const placeholders = Array.from({ length: Math.max(0, 6 - legalCount) });
+
   const co = displayMatch?.currentOver ?? 0;
   const cb = displayMatch?.currentBall ?? 0;
   const nextBallInOver = cb < 6 ? cb + 1 : 1;
@@ -449,45 +458,36 @@ export default function MatchPage() {
               <span className="inline-block w-3 h-3 rounded bg-red-600 align-middle mr-1" /> W
             </span>
           </div>
-          <div className="grid grid-cols-6 gap-2 md:gap-3">
-            {[1, 2, 3, 4, 5, 6].map((slot) => {
-              const ballsInSlot = ballsThisOver
-                .filter((b) => b.ballNumber === slot)
-                .sort((a, b) => {
-                  const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-                  const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-                  if (ta !== tb) return ta - tb;
-                  return (a.subBallNumber ?? 0) - (b.subBallNumber ?? 0);
-                });
-              const last = ballsInSlot[ballsInSlot.length - 1];
-              const filled = ballsInSlot.length > 0;
-              return (
-                <div
-                  key={slot}
-                  className={`relative flex aspect-square flex-col items-center justify-start rounded-2xl border-2 text-center transition duration-300 overflow-hidden ${
-                    filled && last ? ballSlotClass(last, true) : ballSlotClass(undefined, false)
-                  }`}
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-tighter text-white/40 mb-1 mt-2">
-                    Ball {slot}
+          <div className="flex flex-wrap gap-2 md:gap-3">
+            {/* 1. Render all recorded deliveries (legal + extras) chronologically */}
+            {deliveries.map((b, idx) => (
+              <div
+                key={`${b.ballNumber}-${b.subBallNumber ?? 0}-${idx}`}
+                className={`relative flex aspect-square w-[calc(25%-8px)] sm:w-[calc(16.66%-12px)] md:w-20 lg:w-24 flex-col items-center justify-center rounded-2xl border-2 text-center transition duration-300 overflow-hidden ${ballSlotClass(b, true)}`}
+              >
+                <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-tighter text-white/40 mb-0.5">
+                  {(b.subBallNumber ?? 0) > 0 ? 'Extra' : `Ball ${b.ballNumber}`}
+                </span>
+                <div className="flex items-center justify-center px-1">
+                  <span className={`${b.outcome === 'Extras' ? 'text-xs md:text-sm font-bold opacity-90 px-1.5 py-0.5 rounded bg-black/20' : 'text-xl md:text-2xl font-black tabular-nums'}`}>
+                    {formatBallChip(b)}
                   </span>
-                  <div className="flex-1 w-full flex items-center justify-center overflow-hidden px-1 pb-3">
-                    <div className="text-sm md:text-base font-black tabular-nums leading-none flex flex-row flex-wrap gap-1.5 justify-center items-center overflow-y-auto scrollbar-hide max-h-full py-1">
-                      {filled
-                        ? ballsInSlot.map((b) => (
-                            <span 
-                              key={`${b.ballNumber}-${b.subBallNumber ?? 0}-${b.createdAt ?? ''}`}
-                              className={`${b.outcome === 'Extras' ? 'text-[11px] md:text-xs opacity-90 px-1 py-0.5 rounded bg-black/20' : 'text-lg md:text-xl'}`}
-                            >
-                              {formatBallChip(b)}
-                            </span>
-                          ))
-                        : <span className="text-gray-600 opacity-40">—</span>}
-                    </div>
-                  </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
+
+            {/* 2. Render placeholders for the remaining legal balls in the over */}
+            {placeholders.map((_, idx) => (
+              <div
+                key={`empty-${idx}`}
+                className={`relative flex aspect-square w-[calc(25%-8px)] sm:w-[calc(16.66%-12px)] md:w-20 lg:w-24 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-600 bg-gray-900/40 text-gray-600 text-center transition duration-300 overflow-hidden`}
+              >
+                <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-tighter opacity-40 mb-0.5">
+                  Ball {legalCount + idx + 1}
+                </span>
+                <span className="text-gray-600 opacity-30 text-lg">—</span>
+              </div>
+            ))}
           </div>
         </section>
         )}
