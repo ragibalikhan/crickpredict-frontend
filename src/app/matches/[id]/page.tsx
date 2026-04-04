@@ -419,7 +419,9 @@ export default function MatchPage() {
 
             <p className="text-[11px] text-center sm:text-left text-gray-500">
               {displayMatch.status === 'live'
-                ? 'Scores refresh every 2s · socket + poll'
+                ? `Scores refresh every 2s · socket + poll${
+                    (displayMatch.currentInnings ?? 1) >= 2 ? ' · 2nd innings (chase)' : ''
+                  }`
                 : 'Fixture synced from feed'}
             </p>
           </div>
