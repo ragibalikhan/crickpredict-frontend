@@ -53,14 +53,14 @@ export const useGlobalSocket = () => {
       predictionType: string;
     }) => {
       useStore.getState().updateCoins(data.coinsBalance);
-      if (data.predictionType === 'ball') {
-        useStore.getState().setBallBetResult({
-          won: data.won,
-          stake: data.stake,
-          payout: data.payout,
-          predictionId: data.predictionId,
-        });
-      }
+      // Show modal for ALL types, not just ball
+      useStore.getState().setBetSettlementResult({
+        won: data.won,
+        stake: data.stake,
+        payout: data.payout,
+        predictionId: data.predictionId,
+        predictionType: data.predictionType,
+      });
       useStore.getState().addNotification({
         _id: `pred-result-${data.predictionId}`,
         title: data.won ? 'You won the bet!' : 'You lost the bet',

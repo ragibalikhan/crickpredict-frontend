@@ -36,7 +36,7 @@ export default function MatchPage() {
   const [matchLoad, setMatchLoad] = useState<'loading' | 'ok' | 'error'>('loading');
   const [scheduleInfo, setScheduleInfo] = useState<SchedulePayload | null>(null);
   useSocket(matchId, setBetActivity);
-  const { liveMatch, user, token, setLiveMatch, updateCoins, addNotification, ballBetResult, setBallBetResult } =
+  const { liveMatch, user, token, setLiveMatch, updateCoins, addNotification, betSettlementResult, setBetSettlementResult } =
     useStore();
   const [predictionAmount, setPredictionAmount] = useState(10);
   const [activeTab, setActiveTab] = useState<'ball' | 'over' | 'batsman'>('ball');
@@ -767,7 +767,7 @@ export default function MatchPage() {
         </div>
       )}
 
-      {ballBetResult && (
+      {betSettlementResult && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
           role="dialog"
@@ -775,38 +775,39 @@ export default function MatchPage() {
         >
           <div
             className={`w-full max-w-md rounded-3xl border p-8 shadow-2xl ${
-              ballBetResult.won
+              betSettlementResult.won
                 ? 'border-emerald-500/40 bg-gray-900'
                 : 'border-amber-600/40 bg-gray-900'
             }`}
           >
             <div className="text-center mb-6">
-              <div className="text-5xl mb-2">{ballBetResult.won ? '🎉' : '📉'}</div>
+              <div className="text-5xl mb-2">{betSettlementResult.won ? '🎉' : '📉'}</div>
               <h2 className="text-3xl font-black text-white">
-                {ballBetResult.won ? 'You won the bet!' : 'You lost the bet'}
+                {betSettlementResult.won ? 'You won the bet!' : 'You lost the bet'}
               </h2>
               <p className="text-gray-400 mt-2 text-sm">
-                Ball result is in — your stake has been settled.
+                The result for your {betSettlementResult.predictionType || 'ball'} bet is in — your stake has been settled.
               </p>
             </div>
             <div className="rounded-2xl bg-gray-800/80 border border-gray-700 p-4 space-y-2 text-center font-mono">
-              {ballBetResult.won ? (
+              {betSettlementResult.won ? (
                 <p className="text-emerald-400 text-lg">
-                  +{ballBetResult.payout.toLocaleString()} <span className="text-yellow-400">🪙</span> paid out
+                  +{betSettlementResult.payout.toLocaleString()} <span className="text-yellow-400">🪙</span> paid out
                 </p>
               ) : (
                 <p className="text-amber-200/90 text-lg">
-                  −{ballBetResult.stake.toLocaleString()} <span className="text-yellow-400">🪙</span> stake
+                  −{betSettlementResult.stake.toLocaleString()} <span className="text-yellow-400">🪙</span> stake
                 </p>
               )}
-              <p className="text-gray-500 text-xs">
-                Balance updated live: {(user?.coinsBalance ?? 0).toLocaleString()} 🪙
-              </p>
             </div>
             <button
               type="button"
-              onClick={() => setBallBetResult(null)}
-              className="mt-6 w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 py-3 font-bold text-white transition"
+              onClick={() => setBetSettlementResult(null)}
+              className={`mt-8 w-full rounded-2xl py-4 font-black text-lg transition-all shadow-lg hover:shadow-xl active:scale-[0.98] ${
+                betSettlementResult.won
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20'
+                  : 'bg-gray-700 hover:bg-gray-600 text-white'
+              }`}
             >
               OK
             </button>
@@ -816,5 +817,3 @@ export default function MatchPage() {
     </div>
   );
 }
-
-
