@@ -25,7 +25,8 @@ type Tab =
   | 'notify'
   | 'multipliers'
   | 'bonus'
-  | 'branding';
+  | 'branding'
+  | 'playerProps';
 
 export default function AdminPage() {
   const { token, user, setSiteBranding, siteBranding } = useStore();
@@ -111,6 +112,40 @@ export default function AdminPage() {
   const [syncForm, setSyncForm] = useState<{ id: string; increment: string; setTotal: string } | null>(null);
   const [smsPaste, setSmsPaste] = useState('');
   const [smsParseResult, setSmsParseResult] = useState<any>(null);
+
+  const [ppMatches, setPpMatches] = useState<
+    Array<{ _id: string; teamA: string; teamB: string; status?: string; externalId?: string }>
+  >([]);
+  const [ppMatchId, setPpMatchId] = useState('');
+  const [ppSquadData, setPpSquadData] = useState<{
+    match: { externalId?: string; teamA: string; teamB: string; status?: string };
+    squad: { teams: Array<{ teamName: string; players: Array<{ name: string; role: string; isPlayable?: boolean }> }>; source?: string } | null;
+  } | null>(null);
+  const [ppMarkets, setPpMarkets] = useState<
+    Array<{
+      id: string;
+      teamName: string;
+      playerName: string;
+      statType: string;
+      threshold: number;
+      multiplier: number;
+      isPublished: boolean;
+      status: string;
+    }>
+  >([]);
+  const [ppForm, setPpForm] = useState({
+    teamName: '',
+    playerName: '',
+    statType: 'runs' as 'runs' | 'wickets',
+    threshold: '50',
+    multiplier: '5',
+    isPublished: false,
+  });
+  const [ppManual, setPpManual] = useState({
+    teamName: '',
+    name: '',
+    role: 'batsman' as 'batsman' | 'bowler' | 'keeper_batsman' | 'all_rounder',
+  });
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -210,6 +245,31 @@ export default function AdminPage() {
     setLoading(false);
   }, [token]);
 
+  const fetchPpMatches = useCallback(async () => {
+    const res = await fetch(`${API_BASE}/matches`);
+    if (res.ok) {
+      const data = await res.json();
+      setPpMatches(Array.isArray(data) ? data : []);
+    }
+  }, []);
+
+  const loadPlayerPropsDetail = useCallback(
+    async (matchId: string) => {
+      if (!matchId) return;
+      const [sRes, mRes] = await Promise.all([
+        fetch(`${API_BASE}/admin/player-props/match/${matchId}/squad`, { headers }),
+        fetch(`${API_BASE}/admin/player-props/match/${matchId}/markets`, { headers }),
+      ]);
+      if (sRes.ok) {
+        const d = await sRes.json();
+        setPpSquadData(d);
+      } else setPpSquadData(null);
+      if (mRes.ok) setPpMarkets(await mRes.json());
+      else setPpMarkets([]);
+    },
+    [token],
+  );
+
   useEffect(() => {
     if (!token) return;
     fetchStats();
@@ -225,6 +285,10 @@ export default function AdminPage() {
     if (activeTab === 'multipliers') fetchBallMultipliers();
     if (activeTab === 'bonus') fetchBonusSettings();
     if (activeTab === 'branding') fetchBrandingSettings();
+    if (activeTab === 'playerProps') {
+      fetchPpMatches();
+      if (ppMatchId) loadPlayerPropsDetail(ppMatchId);
+    }
     if (activeTab === 'overview') {
       fetchMatchBetting();
       fetchBetOutcomeStats();
@@ -241,6 +305,9 @@ export default function AdminPage() {
     fetchBallMultipliers,
     fetchBonusSettings,
     fetchBrandingSettings,
+    fetchPpMatches,
+    loadPlayerPropsDetail,
+    ppMatchId,
   ]);
 
   const saveCoinRate = async () => {
@@ -592,6 +659,7 @@ export default function AdminPage() {
     { id: 'multipliers', label: 'Game Multipliers', icon: '🎯' },
     { id: 'bonus', label: 'Bonus Settings', icon: '🎁' },
     { id: 'branding', label: 'Site branding', icon: '🎨' },
+    { id: 'playerProps', label: 'Player props', icon: '🏏' },
     { id: 'notify', label: 'Notify Users', icon: '🔔' },
   ];
 
@@ -1592,6 +1660,308 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'playerProps' && (
+          <div className="max-w-4xl space-y-6">
+            <div className="flex flex-wrap justify-between items-center gap-4">
+              <h2 className="text-xl font-bold">Player props (squads &amp; markets)</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  fetchPpMatches();
+                  if (ppMatchId) loadPlayerPropsDetail(ppMatchId);
+                }}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm"
+              >
+                ↻ Refresh
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-400">
+              Pick an upcoming or live match, sync squads from CricAPI (requires <code className="text-indigo-300">CRICAPI_KEY</code>{' '}
+              and a match <code className="text-indigo-300">externalId</code>), then create runs/wickets markets and toggle
+              visibility for users.
+            </p>
+
+            <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 space-y-4">
+              <label className="text-xs text-gray-500 uppercase font-bold tracking-wider">Match</label>
+              <select
+                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white"
+                value={ppMatchId}
+                onChange={(e) => {
+                  setPpMatchId(e.target.value);
+                  if (e.target.value) loadPlayerPropsDetail(e.target.value);
+                }}
+              >
+                <option value="">— Select match —</option>
+                {ppMatches.map((m) => (
+                  <option key={m._id} value={m._id}>
+                    {m.teamA} vs {m.teamB} ({m.status || '?'})
+                    {m.externalId ? '' : ' · no external id'}
+                  </option>
+                ))}
+              </select>
+
+              {ppMatchId && (
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <button
+                    type="button"
+                    disabled={!!actionLoading}
+                    onClick={async () => {
+                      setActionLoading('ppSync');
+                      const res = await fetch(`${API_BASE}/admin/player-props/match/${ppMatchId}/squad/sync`, {
+                        method: 'POST',
+                        headers,
+                      });
+                      const d = await res.json().catch(() => ({}));
+                      setActionLoading(null);
+                      if (res.ok) {
+                        setPpSquadData(d);
+                        showToast('Squad synced from API');
+                      } else showToast(d?.message || 'Sync failed', 'error');
+                    }}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold text-sm disabled:opacity-50"
+                  >
+                    Sync squad (CricAPI)
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {ppMatchId && ppSquadData && (
+              <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 space-y-4">
+                <h3 className="font-bold text-lg">Squad</h3>
+                <p className="text-xs text-gray-500">
+                  Source: {ppSquadData.squad?.source || '—'} · External id:{' '}
+                  {ppSquadData.match?.externalId || '—'}
+                </p>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {(ppSquadData.squad?.teams || []).map((t) => (
+                    <div key={t.teamName} className="rounded-xl border border-gray-700/60 bg-gray-900/40 p-4">
+                      <p className="font-bold text-indigo-300 mb-2">{t.teamName}</p>
+                      <ul className="text-sm space-y-1 max-h-56 overflow-y-auto">
+                        {t.players.map((p) => (
+                          <li key={p.name} className="flex justify-between gap-2 text-gray-300">
+                            <span className="truncate">{p.name}</span>
+                            <span className="text-gray-500 shrink-0 text-xs">
+                              {p.role.replace(/_/g, ' ')}
+                              {p.isPlayable === false ? ' · bench' : ''}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-gray-700/50 pt-4 space-y-2">
+                  <p className="text-sm font-semibold text-gray-300">Add player manually</p>
+                  <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                    <input
+                      placeholder="Team name (must match squad)"
+                      className="flex-1 min-w-[8rem] bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                      value={ppManual.teamName}
+                      onChange={(e) => setPpManual((x) => ({ ...x, teamName: e.target.value }))}
+                    />
+                    <input
+                      placeholder="Player name"
+                      className="flex-1 min-w-[8rem] bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                      value={ppManual.name}
+                      onChange={(e) => setPpManual((x) => ({ ...x, name: e.target.value }))}
+                    />
+                    <select
+                      className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                      value={ppManual.role}
+                      onChange={(e) =>
+                        setPpManual((x) => ({
+                          ...x,
+                          role: e.target.value as typeof ppManual.role,
+                        }))
+                      }
+                    >
+                      <option value="batsman">Batsman</option>
+                      <option value="bowler">Bowler</option>
+                      <option value="keeper_batsman">Keeper / batsman</option>
+                      <option value="all_rounder">All-rounder</option>
+                    </select>
+                    <button
+                      type="button"
+                      disabled={!!actionLoading}
+                      onClick={async () => {
+                        setActionLoading('ppAddP');
+                        const res = await fetch(`${API_BASE}/admin/player-props/match/${ppMatchId}/squad/player`, {
+                          method: 'POST',
+                          headers,
+                          body: JSON.stringify(ppManual),
+                        });
+                        const d = await res.json().catch(() => ({}));
+                        setActionLoading(null);
+                        if (res.ok) {
+                          setPpSquadData(d);
+                          setPpManual({ teamName: '', name: '', role: 'batsman' });
+                          showToast('Player added');
+                        } else showToast(d?.message || 'Failed', 'error');
+                      }}
+                      className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm font-semibold"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {ppMatchId && (
+              <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 space-y-4">
+                <h3 className="font-bold text-lg">Create market</h3>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <input
+                    placeholder="Team name"
+                    className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={ppForm.teamName}
+                    onChange={(e) => setPpForm((f) => ({ ...f, teamName: e.target.value }))}
+                  />
+                  <input
+                    placeholder="Player name (exact)"
+                    className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={ppForm.playerName}
+                    onChange={(e) => setPpForm((f) => ({ ...f, playerName: e.target.value }))}
+                  />
+                  <select
+                    className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={ppForm.statType}
+                    onChange={(e) =>
+                      setPpForm((f) => ({ ...f, statType: e.target.value as 'runs' | 'wickets' }))
+                    }
+                  >
+                    <option value="runs">Runs (batting)</option>
+                    <option value="wickets">Wickets (bowling)</option>
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Threshold (e.g. 50 runs, 3 wickets)"
+                    className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={ppForm.threshold}
+                    onChange={(e) => setPpForm((f) => ({ ...f, threshold: e.target.value }))}
+                  />
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="Multiplier"
+                    className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={ppForm.multiplier}
+                    onChange={(e) => setPpForm((f) => ({ ...f, multiplier: e.target.value }))}
+                  />
+                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={ppForm.isPublished}
+                      onChange={(e) => setPpForm((f) => ({ ...f, isPublished: e.target.checked }))}
+                    />
+                    Published (visible to users)
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  disabled={!!actionLoading}
+                  onClick={async () => {
+                    setActionLoading('ppMarket');
+                    const res = await fetch(`${API_BASE}/admin/player-props/match/${ppMatchId}/markets`, {
+                      method: 'POST',
+                      headers,
+                      body: JSON.stringify({
+                        teamName: ppForm.teamName.trim(),
+                        playerName: ppForm.playerName.trim(),
+                        statType: ppForm.statType,
+                        threshold: Number(ppForm.threshold),
+                        multiplier: Number(ppForm.multiplier),
+                        isPublished: ppForm.isPublished,
+                      }),
+                    });
+                    const d = await res.json().catch(() => ({}));
+                    setActionLoading(null);
+                    if (res.ok) {
+                      setPpMarkets(d);
+                      showToast('Market created');
+                    } else showToast(d?.message || 'Failed', 'error');
+                  }}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-sm disabled:opacity-50"
+                >
+                  Create market
+                </button>
+              </div>
+            )}
+
+            {ppMatchId && ppMarkets.length > 0 && (
+              <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 overflow-x-auto">
+                <h3 className="font-bold text-lg mb-4">Markets</h3>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b border-gray-700">
+                      <th className="pb-2 pr-2">Player</th>
+                      <th className="pb-2 pr-2">Stat</th>
+                      <th className="pb-2 pr-2">×</th>
+                      <th className="pb-2 pr-2">Published</th>
+                      <th className="pb-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ppMarkets.map((m) => (
+                      <tr key={m.id} className="border-b border-gray-800/80">
+                        <td className="py-2 pr-2">
+                          <div className="font-medium text-white">{m.playerName}</div>
+                          <div className="text-xs text-gray-500">{m.teamName}</div>
+                        </td>
+                        <td className="py-2 pr-2">
+                          {m.statType} ≥ {m.threshold}
+                        </td>
+                        <td className="py-2 pr-2 font-mono">{m.multiplier}×</td>
+                        <td className="py-2 pr-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const res = await fetch(`${API_BASE}/admin/player-props/markets/${m.id}`, {
+                                method: 'PATCH',
+                                headers,
+                                body: JSON.stringify({ isPublished: !m.isPublished }),
+                              });
+                              const d = await res.json().catch(() => ({}));
+                              if (res.ok) setPpMarkets(d);
+                              else showToast(d?.message || 'Update failed', 'error');
+                            }}
+                            className={`px-3 py-1 rounded-lg text-xs font-bold ${
+                              m.isPublished ? 'bg-emerald-600' : 'bg-gray-700'
+                            }`}
+                          >
+                            {m.isPublished ? 'On' : 'Off'}
+                          </button>
+                        </td>
+                        <td className="py-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!confirm('Delete this market?')) return;
+                              const res = await fetch(`${API_BASE}/admin/player-props/markets/${m.id}`, {
+                                method: 'DELETE',
+                                headers,
+                              });
+                              const d = await res.json().catch(() => ({}));
+                              if (res.ok) setPpMarkets(d);
+                              else showToast(d?.message || 'Delete failed', 'error');
+                            }}
+                            className="text-red-400 hover:underline text-xs"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
