@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import Navbar from '../components/Navbar';
 import ToastProvider from '../components/ToastProvider';
+import BetSettlementModal from '../components/BetSettlementModal';
 
 export const metadata: Metadata = {
   title: 'CrickPredict',
@@ -18,6 +19,7 @@ export default function RootLayout({
       <body className="bg-gray-900 text-white min-h-screen pt-16 selection:bg-indigo-500/30">
         <Navbar />
         <ToastProvider />
+        <BetSettlementModal />
         {children}
       </body>
     </html>

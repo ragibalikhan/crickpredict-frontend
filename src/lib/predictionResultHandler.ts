@@ -12,8 +12,8 @@ export type PredictionResultPayload = {
 };
 
 /**
- * Single entry for settlement: updates balance, shows native alert + in-app modal, notification.
- * Deduplicates when both global and match Socket.IO connections receive the same event.
+ * Single entry for settlement: updates balance, opens global BetSettlementModal (same UX as “Bet placed”),
+ * and pushes a notification. Deduplicates when both Socket.IO connections receive the same event.
  */
 export function handlePredictionResultEvent(data: PredictionResultPayload): void {
   const id = String(data.predictionId || '');
@@ -35,18 +35,19 @@ export function handlePredictionResultEvent(data: PredictionResultPayload): void
   const won = !!data.won;
   const payout = Number(data.payout) || 0;
   const stake = Number(data.stake) || 0;
+
+  useStore.getState().setBetSettlementResult({
+    won,
+    stake,
+    payout,
+    predictionId: id,
+    predictionType: data.predictionType,
+  });
+
   const bal =
     typeof data.coinsBalance === 'number' && Number.isFinite(data.coinsBalance)
       ? data.coinsBalance
       : useStore.getState().user?.coinsBalance ?? 0;
-
-  const alertMsg = won
-    ? `You won!\n+${payout.toLocaleString()} coins paid out.\nNew balance: ${bal.toLocaleString()} coins.`
-    : `You lost this bet.\nStake ${stake.toLocaleString()} coins was not returned.\nBalance: ${bal.toLocaleString()} coins.`;
-
-  if (typeof window !== 'undefined') {
-    window.alert(alertMsg);
-  }
 
   useStore.getState().addNotification({
     _id: `pred-result-${id}`,
