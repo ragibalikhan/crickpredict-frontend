@@ -55,21 +55,7 @@ export default function MatchPage() {
   const { liveMatch, user, token, setLiveMatch, updateCoins, addNotification } = useStore();
   /** Raw string so users can clear/replace digits; clamp only on blur / place bet (avoid 10→1010 bugs). */
   const [stakeInput, setStakeInput] = useState(String(MIN_STAKE_COINS));
-  const [activeTab, setActiveTab] = useState<'ball' | 'over' | 'player_props'>('ball');
-  const [playerPropMarkets, setPlayerPropMarkets] = useState<
-    Array<{
-      id: string;
-      teamName: string;
-      playerName: string;
-      statType: string;
-      threshold: number;
-      multiplier: number;
-      label: string;
-      playerImageUrl?: string | null;
-    }>
-  >([]);
-  const [playerPropsLoadError, setPlayerPropsLoadError] = useState<string | null>(null);
-  const [playerPropsBettingOpen, setPlayerPropsBettingOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState<'ball' | 'over'>('ball');
   const [gameMultipliers, setGameMultipliers] = useState<{
     ballMultipliers: Record<string, number>;
     nonBallMultiplierRange: { min: number; max: number };
@@ -153,53 +139,6 @@ export default function MatchPage() {
   useEffect(() => {
     setStakeInput(String(MIN_STAKE_COINS));
     setActiveTab('ball');
-  }, [matchId]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !matchId) return;
-    const q = new URLSearchParams(window.location.search);
-    if (q.get('tab') === 'player_props') {
-      setActiveTab('player_props');
-    }
-  }, [matchId]);
-
-  useEffect(() => {
-    if (!matchId) return;
-    let cancelled = false;
-    const loadProps = () =>
-      fetch(`${API_BASE}/player-props/match/${matchId}/markets`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then(
-          (
-            data: {
-              markets?: Array<{
-                id: string;
-                label: string;
-                multiplier: number;
-                teamName: string;
-                playerName: string;
-                statType: string;
-                threshold: number;
-                playerImageUrl?: string | null;
-              }>;
-              bettingOpen?: boolean;
-            } | null,
-          ) => {
-            if (cancelled || data == null) return;
-            setPlayerPropMarkets(data.markets ?? []);
-            setPlayerPropsBettingOpen(data.bettingOpen !== false);
-            setPlayerPropsLoadError(null);
-          },
-        )
-        .catch(() => {
-          if (!cancelled) setPlayerPropsLoadError('Could not load player props');
-        });
-    loadProps();
-    const t = setInterval(loadProps, 15_000);
-    return () => {
-      cancelled = true;
-      clearInterval(t);
-    };
   }, [matchId]);
 
   const placePrediction = async (type: string, value: string) => {
@@ -329,62 +268,11 @@ export default function MatchPage() {
   const matchIsLive = displayMatch?.status === 'live';
   const showBettingCard =
     displayMatch?.status === 'upcoming' || displayMatch?.status === 'live';
-  /** Player props: pre-match only (backend also enforces). */
-  const canBetPlayerProps =
-    showBettingCard &&
-    displayMatch?.status === 'upcoming' &&
-    playerPropsBettingOpen;
   const canPlaceBet =
     activeTab === 'ball' &&
     ballBet.bettingOpen &&
     !displayMatch?.predictionsLocked &&
     matchIsLive;
-
-  const placePlayerPropBet = async (marketId: string, label: string) => {
-    if (!token) return alert('Please log in to place a bet.');
-    if (!canBetPlayerProps) {
-      alert(
-        displayMatch?.status === 'completed'
-          ? 'This match has ended. Betting is closed.'
-          : displayMatch?.status === 'live'
-            ? 'Player prop betting is closed — the match is live. Pre-match picks only.'
-            : 'Player props are not available for this fixture.',
-      );
-      return;
-    }
-    const stake = clampStakeAmount(Number(stakeInput) || 0);
-    setStakeInput(String(stake));
-    try {
-      const res = await fetch(`${API_BASE}/player-props/bet`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ marketId, amountStaked: stake }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && typeof data.coinsBalance === 'number') {
-        updateCoins(data.coinsBalance);
-        if (data.activity) setBetActivity(data.activity);
-        const msg = `You placed ${stake} coins on: ${label}`;
-        setToastMsg(msg);
-        setBetPlacedPopup(msg);
-        addNotification({
-          _id: `bet-${Date.now()}`,
-          title: 'Bet placed',
-          message: msg,
-          type: 'success',
-          read: false,
-          createdAt: new Date().toISOString(),
-        });
-      } else {
-        alert(data?.message || 'Could not place this bet.');
-      }
-    } catch {
-      alert('Could not reach the server. Try again.');
-    }
-  };
 
   const placePredictionGuarded = async (type: string, value: string) => {
     if (!canPlaceBet) {
@@ -787,33 +675,19 @@ export default function MatchPage() {
                    Over
                    <span className="text-[10px] font-black uppercase tracking-wide bg-white/15 px-1.5 py-0.5 rounded">Soon</span>
                  </button>
-                 <button type="button" onClick={() => setActiveTab('player_props')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg inline-flex items-center justify-center gap-1.5 ${activeTab === 'player_props' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>
-                   Player props
-                 </button>
              </div>
              <span className="hidden md:inline-block text-sm font-medium text-indigo-300/90 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
-               {activeTab === 'player_props'
-                 ? 'Pre-match only — closes when the match goes live'
-                 : 'Ball outcomes use the multipliers on each button'}
+               Ball outcomes use the multipliers on each button
              </span>
           </div>
           <p className="md:hidden mb-3 text-center text-[11px] text-indigo-300/80">
-            {activeTab === 'player_props'
-              ? 'Pick a player milestone below.'
-              : 'Multipliers are shown on each ball outcome below.'}
+            Multipliers are shown on each ball outcome below.
           </p>
 
           {displayMatch?.status === 'upcoming' && activeTab === 'ball' && (
             <div className="mb-4 rounded-xl border border-sky-500/30 bg-sky-950/30 px-4 py-3 text-sm text-sky-100">
-              Ball-by-ball betting opens when this match goes live. Use the <strong>Player props</strong> tab for
-              pre-match picks (they close when the game goes live).
-            </div>
-          )}
-
-          {displayMatch?.status === 'live' && activeTab === 'player_props' && (
-            <div className="mb-4 rounded-xl border border-amber-500/35 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
-              Player prop betting is <strong>closed</strong> — the match is live. Pre-match picks only; use the{' '}
-              <strong>Ball</strong> tab for live ball-by-ball betting.
+              Ball-by-ball betting opens when this match goes live. Pre-match <strong>Bet on Favrouties</strong> picks
+              are on your <strong>Dashboard</strong>.
             </div>
           )}
 
@@ -938,103 +812,6 @@ export default function MatchPage() {
                   <p className="text-sm text-gray-400 max-w-md mx-auto">
                     Totals, maidens, and wicket-in-over props will launch here after settlement logic is wired to live overs.
                   </p>
-                </div>
-              )}
-
-              {activeTab === 'player_props' && (
-                <div className="space-y-4">
-                  {playerPropsLoadError && (
-                    <p className="text-sm text-amber-400">{playerPropsLoadError}</p>
-                  )}
-                  {playerPropMarkets.length === 0 ? (
-                    <div className="rounded-2xl border border-emerald-500/25 bg-emerald-950/20 px-6 py-10 text-center">
-                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-300/80 mb-2">
-                        Player props
-                      </p>
-                      <p className="text-lg font-bold text-white mb-2">No published markets yet</p>
-                      <p className="text-sm text-gray-400 max-w-md mx-auto">
-                        Admins create runs/wickets milestones from synced squads. When they publish a market, it will
-                        show here.
-                      </p>
-                    </div>
-                  ) : !canBetPlayerProps && displayMatch?.status === 'live' ? (
-                    <ul className="space-y-3 opacity-90">
-                      {playerPropMarkets.map((m) => (
-                        <li
-                          key={m.id}
-                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-gray-700/80 bg-gray-900/50 px-4 py-3"
-                        >
-                          <div className="flex gap-3 min-w-0 text-left flex-1">
-                            <div className="w-14 h-14 shrink-0 rounded-xl bg-gray-800 border border-gray-700 overflow-hidden flex items-center justify-center">
-                              {m.playerImageUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={m.playerImageUrl} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                <span className="text-lg font-black text-gray-600">
-                                  {m.playerName.slice(0, 1).toUpperCase()}
-                                </span>
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                            <p className="text-sm text-gray-400 capitalize">
-                              {m.teamName} · {m.statType === 'wickets' ? 'Bowling' : 'Batting'}
-                            </p>
-                            <p className="font-bold text-white leading-snug">{m.label}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="rounded-full bg-gray-600/40 px-3 py-1 text-gray-300 font-mono text-sm tabular-nums">
-                              {formatMultiplierLabel(m.multiplier)}
-                            </span>
-                            <span className="rounded-xl border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-500">
-                              Closed
-                            </span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <ul className="space-y-3">
-                      {playerPropMarkets.map((m) => (
-                        <li
-                          key={m.id}
-                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-gray-700/80 bg-gray-900/50 px-4 py-3"
-                        >
-                          <div className="flex gap-3 min-w-0 text-left flex-1">
-                            <div className="w-14 h-14 shrink-0 rounded-xl bg-gray-800 border border-gray-700 overflow-hidden flex items-center justify-center">
-                              {m.playerImageUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={m.playerImageUrl} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                <span className="text-lg font-black text-gray-600">
-                                  {m.playerName.slice(0, 1).toUpperCase()}
-                                </span>
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                            <p className="text-sm text-gray-400 capitalize">
-                              {m.teamName} · {m.statType === 'wickets' ? 'Bowling' : 'Batting'}
-                            </p>
-                            <p className="font-bold text-white leading-snug">{m.label}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="rounded-full bg-amber-500/15 px-3 py-1 text-amber-200 font-mono font-black text-sm tabular-nums ring-1 ring-amber-400/30">
-                              {formatMultiplierLabel(m.multiplier)}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => placePlayerPropBet(m.id, m.label)}
-                              disabled={!canBetPlayerProps || !token}
-                              className="rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:pointer-events-none px-4 py-2 font-bold text-white text-sm"
-                            >
-                              Bet
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </div>
               )}
 

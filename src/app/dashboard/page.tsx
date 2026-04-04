@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useStore } from '../../store/store';
 import { API_BASE } from '../../lib/api';
 import TeamAvatar from '../../components/TeamAvatar';
+import BetOnFavourites from '../../components/BetOnFavourites';
 
 export default function Dashboard() {
   const { user, token } = useStore();
@@ -86,6 +87,8 @@ export default function Dashboard() {
              </div>
           </div>
         </header>
+
+        <BetOnFavourites />
 
         <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
           <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>

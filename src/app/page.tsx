@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useStore } from '../store/store';
-import BetOnFavourites from '../components/BetOnFavourites';
 
 export default function Home() {
   const siteBranding = useStore((s) => s.siteBranding);
@@ -48,8 +47,6 @@ export default function Home() {
           </Link>
         </div>
         </div>
-
-        <BetOnFavourites />
         
         <div className="w-full max-w-5xl pb-16 grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="p-8 rounded-3xl bg-gray-800/40 border border-gray-700/50 backdrop-blur-sm">

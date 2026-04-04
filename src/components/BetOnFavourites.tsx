@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { API_BASE } from '../lib/api';
+import { useStore } from '../store/store';
+import { clampStakeAmount, MAX_STAKE_COINS, MIN_STAKE_COINS } from '../lib/betLimits';
 
 type HomeItem = {
   matchId: string;
@@ -28,34 +30,76 @@ function formatMultiplierLabel(n: number): string {
   return `${Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)}×`;
 }
 
+/**
+ * Logged-in dashboard: pre-match player props with stake + Place bet (no match-page tab).
+ */
 export default function BetOnFavourites() {
+  const { token, user, updateCoins } = useStore();
   const [items, setItems] = useState<HomeItem[]>([]);
   const [loadState, setLoadState] = useState<'loading' | 'ok' | 'error'>('loading');
+  const [stakeInput, setStakeInput] = useState(String(MIN_STAKE_COINS));
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadFeed = useCallback(() => {
     fetch(`${API_BASE}/player-props/home`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { items?: HomeItem[] } | null) => {
-        if (cancelled || !data) {
-          if (!cancelled) setLoadState('error');
+        if (!data) {
+          setLoadState('error');
           return;
         }
         setItems(Array.isArray(data.items) ? data.items : []);
         setLoadState('ok');
       })
-      .catch(() => {
-        if (!cancelled) setLoadState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
+      .catch(() => setLoadState('error'));
   }, []);
+
+  useEffect(() => {
+    loadFeed();
+    const t = setInterval(loadFeed, 15_000);
+    return () => clearInterval(t);
+  }, [loadFeed]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const x = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(x);
+  }, [toast]);
+
+  const placeBet = async (marketId: string, label: string) => {
+    if (!token) return;
+    const stake = clampStakeAmount(Number(stakeInput) || 0);
+    setStakeInput(String(stake));
+    setBusyId(marketId);
+    try {
+      const res = await fetch(`${API_BASE}/player-props/bet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ marketId, amountStaked: stake }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && typeof data.coinsBalance === 'number') {
+        updateCoins(data.coinsBalance);
+        setToast(`Bet placed: ${stake} coins on ${label}`);
+        loadFeed();
+      } else {
+        alert((data as { message?: string })?.message || 'Could not place bet.');
+      }
+    } catch {
+      alert('Could not reach the server.');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   if (loadState === 'loading') {
     return (
-      <section className="w-full max-w-6xl mx-auto px-4 py-12 md:py-16">
-        <h2 className="text-2xl md:text-3xl font-black text-white text-center mb-8">Bet on Favourites</h2>
+      <section className="w-full mb-10 sm:mb-12">
+        <h2 className="text-2xl md:text-3xl font-black text-white text-center mb-8">Bet on Favrouties</h2>
         <div className="flex justify-center py-12">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
         </div>
@@ -64,25 +108,79 @@ export default function BetOnFavourites() {
   }
 
   if (loadState === 'error') {
-    return null;
+    return (
+      <section className="w-full mb-10 sm:mb-12 rounded-2xl border border-amber-600/30 bg-amber-950/20 px-4 py-6 text-center text-amber-100 text-sm">
+        Could not load Bet on Favrouties. Check that the API is running.
+      </section>
+    );
   }
 
   if (items.length === 0) {
     return (
-      <section className="w-full max-w-6xl mx-auto px-4 py-10 md:py-12 border-t border-gray-800/80">
-        <h2 className="text-xl md:text-2xl font-black text-white text-center mb-2">Bet on Favourites</h2>
-        <p className="text-center text-sm text-gray-500">No pre-match player picks right now — check back after admins publish markets.</p>
+      <section className="w-full mb-10 sm:mb-12 rounded-2xl border border-gray-700/50 bg-gray-800/30 px-4 py-8">
+        <h2 className="text-xl md:text-2xl font-black text-white text-center mb-2">Bet on Favrouties</h2>
+        <p className="text-center text-sm text-gray-500">
+          No pre-match player picks right now — check back after admins publish markets.
+        </p>
       </section>
     );
   }
 
   return (
-    <section className="w-full max-w-6xl mx-auto px-4 py-12 md:py-16 border-t border-gray-800/80">
-      <div className="text-center mb-10">
-        <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Bet on Favourites</h2>
-        <p className="text-gray-400 text-sm md:text-base max-w-2xl mx-auto">
+    <section className="w-full mb-10 sm:mb-12">
+      {toast && (
+        <div className="mb-4 rounded-xl border border-emerald-500/40 bg-emerald-950/50 px-4 py-3 text-center text-sm text-emerald-100">
+          {toast}
+        </div>
+      )}
+
+      <div className="text-center mb-6">
+        <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Bet on Favrouties</h2>
+        <p className="text-gray-400 text-sm md:text-base max-w-2xl mx-auto mb-4">
           Pre-match player picks — runs and wickets milestones. Betting closes when the match goes live.
         </p>
+
+        {token ? (
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 flex-wrap">
+            <span className="text-sm text-gray-400">
+              Balance:{' '}
+              <span className="font-mono font-bold text-yellow-400 tabular-nums">
+                {(user?.coinsBalance ?? 0).toLocaleString()}
+              </span>{' '}
+              coins
+            </span>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-500">Stake</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={stakeInput}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '') {
+                    setStakeInput('');
+                    return;
+                  }
+                  if (!/^\d+$/.test(v)) return;
+                  if (v.length > 8) return;
+                  setStakeInput(v);
+                }}
+                onBlur={() => setStakeInput(String(clampStakeAmount(Number(stakeInput) || 0)))}
+                className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 w-28 text-center font-mono font-bold text-white"
+              />
+              <span className="text-[10px] text-gray-600">
+                {MIN_STAKE_COINS}–{MAX_STAKE_COINS.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">
+            <Link href="/login" className="text-indigo-400 font-semibold hover:underline">
+              Log in
+            </Link>{' '}
+            to place bets on player picks.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
@@ -129,12 +227,23 @@ export default function BetOnFavourites() {
               <span className="inline-flex rounded-full bg-amber-500/15 px-3 py-1 text-amber-200 font-mono font-black text-sm tabular-nums ring-1 ring-amber-400/30">
                 {formatMultiplierLabel(row.market.multiplier)}
               </span>
-              <Link
-                href={`/matches/${row.matchId}?tab=player_props`}
-                className="shrink-0 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white transition"
-              >
-                Bet now
-              </Link>
+              {token ? (
+                <button
+                  type="button"
+                  disabled={busyId != null || !row.bettingOpen}
+                  onClick={() => placeBet(row.market.id, row.market.label)}
+                  className="shrink-0 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:pointer-events-none px-4 py-2.5 text-sm font-bold text-white transition"
+                >
+                  {busyId === row.market.id ? '…' : 'Place bet'}
+                </button>
+              ) : (
+                <Link
+                  href="/login"
+                  className="shrink-0 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 text-sm font-bold text-white transition"
+                >
+                  Log in
+                </Link>
+              )}
             </div>
           </article>
         ))}
