@@ -54,7 +54,8 @@ export default function MatchPage() {
   const [scheduleInfo, setScheduleInfo] = useState<SchedulePayload | null>(null);
   useSocket(matchId, setBetActivity);
   const { liveMatch, user, token, setLiveMatch, updateCoins, addNotification } = useStore();
-  const [predictionAmount, setPredictionAmount] = useState(10);
+  /** Raw string so users can clear/replace digits; clamp only on blur / place bet (avoid 10→1010 bugs). */
+  const [stakeInput, setStakeInput] = useState(String(MIN_STAKE_COINS));
   const [activeTab, setActiveTab] = useState<'ball' | 'over' | 'batsman'>('ball');
   const [gameMultipliers, setGameMultipliers] = useState<{
     ballMultipliers: Record<string, number>;
@@ -136,11 +137,15 @@ export default function MatchPage() {
     return () => clearTimeout(t);
   }, [betPlacedPopup]);
 
+  useEffect(() => {
+    setStakeInput(String(MIN_STAKE_COINS));
+  }, [matchId]);
+
   const placePrediction = async (type: string, value: string) => {
     if (!token) return alert('Please login first to use real coins!');
 
-    const stake = clampStakeAmount(predictionAmount);
-    if (stake !== predictionAmount) setPredictionAmount(stake);
+    const stake = clampStakeAmount(Number(stakeInput) || 0);
+    setStakeInput(String(stake));
 
     try {
       const res = await fetch(`${API_BASE}/predictions`, {
@@ -636,15 +641,26 @@ export default function MatchPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between sm:justify-end gap-2 bg-gray-900/50 py-2.5 px-3 sm:px-4 rounded-xl border border-gray-700/50 w-full sm:w-auto">
               <label className="text-gray-400 font-medium text-sm sm:text-base shrink-0">Stake (coins)</label>
               <div className="flex flex-col items-end gap-0.5 w-full sm:w-auto">
-              <input 
-                type="number" 
-                min={MIN_STAKE_COINS}
-                max={MAX_STAKE_COINS}
-                step={1}
-                value={predictionAmount} 
-                onChange={(e) => setPredictionAmount(clampStakeAmount(Number(e.target.value)))} 
-                className="bg-gray-700 px-3 sm:px-4 py-2 rounded-lg w-full max-w-[8rem] sm:w-28 text-center text-lg sm:text-xl font-bold font-mono focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all border border-gray-600" 
+              <input
+                type="text"
                 inputMode="numeric"
+                autoComplete="off"
+                value={stakeInput}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '') {
+                    setStakeInput('');
+                    return;
+                  }
+                  if (!/^\d+$/.test(v)) return;
+                  if (v.length > 8) return;
+                  setStakeInput(v);
+                }}
+                onBlur={() => {
+                  const n = clampStakeAmount(Number(stakeInput) || 0);
+                  setStakeInput(String(n));
+                }}
+                className="bg-gray-700 px-3 sm:px-4 py-2 rounded-lg w-full max-w-[8rem] sm:w-28 text-center text-lg sm:text-xl font-bold font-mono focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all border border-gray-600"
               />
               <span className="text-[10px] text-gray-500 text-right w-full sm:w-auto">
                 Min {MIN_STAKE_COINS.toLocaleString()} · Max {MAX_STAKE_COINS.toLocaleString()}
