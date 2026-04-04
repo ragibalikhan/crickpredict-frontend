@@ -47,6 +47,8 @@ const ENTRIES: Array<{
     test: (n) => /rajasthan royals|\brr\b/i.test(n),
     initials: 'RR',
     gradient: 'linear-gradient(145deg, #ec4899 0%, #db2777 45%, #9d174d 100%)',
+    logoUrl:
+      'https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Rajasthan_Royals_Logo.png/120px-Rajasthan_Royals_Logo.png',
   },
   {
     test: (n) => /sunrisers|hyderabad|\bsrh\b/i.test(n),

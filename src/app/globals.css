@@ -23,10 +23,20 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Custom scrollbar-hide utility */
+/* Space above fixed bottom tab bar (Navbar) on small screens; md+ matches prior page padding */
 @layer utilities {
+  .pb-mobile-nav {
+    padding-bottom: max(5.5rem, calc(1rem + env(safe-area-inset-bottom, 0px)));
+  }
+  @media (min-width: 768px) {
+    .pb-mobile-nav {
+      padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+    }
+  }
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }

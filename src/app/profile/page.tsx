@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store/store';
 import Link from 'next/link';
 import { API_BASE } from '../../lib/api';
+import TeamAvatar from '../../components/TeamAvatar';
 
 export default function ProfilePage() {
   const { user, token } = useStore();
@@ -96,7 +97,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6 md:p-12 relative overflow-hidden">
+    <div className="min-h-screen bg-gray-900 text-white p-6 pb-mobile-nav md:p-12 relative overflow-hidden">
       {/* Decorative background */}
       <div className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-purple-600/30 rounded-full mix-blend-multiply filter blur-[150px]"></div>
 
@@ -213,9 +214,15 @@ export default function ProfilePage() {
                             <td className="px-4 py-3.5">
                               <Link
                                 href={`/matches/${b.matchId}`}
-                                className="text-indigo-300 hover:text-indigo-200 font-medium underline-offset-2 hover:underline"
+                                className="inline-flex items-center gap-2 text-indigo-300 hover:text-indigo-200 font-medium underline-offset-2 hover:underline max-w-[280px] sm:max-w-none"
                               >
-                                {matchLabel}
+                                {b.match ? (
+                                  <>
+                                    <TeamAvatar teamName={b.match.teamA} size={22} className="shrink-0" />
+                                    <TeamAvatar teamName={b.match.teamB} size={22} className="shrink-0" />
+                                  </>
+                                ) : null}
+                                <span className="truncate">{matchLabel}</span>
                               </Link>
                             </td>
                             <td className="px-4 py-3.5 text-gray-300 capitalize">{b.type}</td>

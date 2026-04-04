@@ -30,14 +30,18 @@ export default function LeaderboardPage() {
   }, [token]);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6 md:p-12 relative overflow-hidden">
+    <div className="min-h-screen bg-gray-900 text-white p-6 pb-mobile-nav md:p-12 relative overflow-hidden">
       {/* Decorative background */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-600 rounded-full mix-blend-multiply filter blur-[150px] opacity-20"></div>
       
       <div className="max-w-4xl mx-auto relative z-10">
-        <div className="text-center mb-12">
-           <h1 className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-4 tracking-tighter">Global Ranking</h1>
-           <p className="text-xl text-gray-400 font-light">The top predictors of the IPL season</p>
+        <div className="text-center mb-8 md:mb-12 px-1">
+           <h1 className="text-3xl sm:text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-3 md:mb-4 tracking-tighter">
+             Global Ranking
+           </h1>
+           <p className="text-base sm:text-xl text-gray-400 font-light leading-relaxed">
+             The top predictors of the IPL season
+           </p>
         </div>
         
         {loading ? (

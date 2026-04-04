@@ -19,13 +19,15 @@ export default function TeamAvatar({ teamName, size = 48, className = '' }: Prop
   const showImg = meta.logoUrl && !imgFailed;
 
   const dim = { width: size, height: size };
+  const altLabel = `${teamName || 'Team'} logo`;
 
   if (!showImg) {
     return (
       <div
         className={`flex shrink-0 items-center justify-center rounded-full font-black uppercase tracking-tighter text-white shadow-inner ring-2 ring-white/15 ${className}`}
         style={{ ...dim, background: meta.gradient, fontSize: Math.max(11, size * 0.28) }}
-        aria-hidden
+        role="img"
+        aria-label={altLabel}
       >
         {meta.initials}
       </div>
@@ -39,7 +41,7 @@ export default function TeamAvatar({ teamName, size = 48, className = '' }: Prop
     >
       <Image
         src={meta.logoUrl!}
-        alt=""
+        alt={altLabel}
         width={size}
         height={size}
         className="object-cover"

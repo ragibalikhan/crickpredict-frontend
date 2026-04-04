@@ -455,7 +455,7 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-gray-900 text-white pb-mobile-nav">
       {toast && (
         <div
           className={`fixed top-20 right-4 z-50 px-5 py-3 rounded-xl shadow-2xl font-medium transition-all ${

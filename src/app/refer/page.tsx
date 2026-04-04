@@ -130,7 +130,7 @@ export default function ReferPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6 md:p-10 pb-24 relative overflow-hidden">
+    <div className="min-h-screen bg-gray-900 text-white p-6 md:p-10 pb-mobile-nav relative overflow-hidden">
       {/* Background decorations */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-600/20 rounded-full filter blur-[150px] pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-indigo-600/20 rounded-full filter blur-[150px] pointer-events-none" />

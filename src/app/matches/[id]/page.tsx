@@ -321,64 +321,68 @@ export default function MatchPage() {
   const shownBowled = Math.max(feedBowled, ballsLogged);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white px-3 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-4 md:p-8 font-sans touch-manipulation">
+    <div className="min-h-screen bg-gray-900 text-white px-3 pt-4 pb-mobile-nav sm:p-4 md:p-8 font-sans touch-manipulation">
       <div className="max-w-4xl mx-auto w-full min-w-0">
         <header className="mb-6 sm:mb-8 bg-gray-800 p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl shadow-2xl border border-gray-700/50 relative overflow-hidden">
           <div className="absolute top-[-40px] right-[-40px] w-40 h-40 bg-indigo-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 pointer-events-none" />
           <div className="absolute bottom-[-40px] left-[-40px] w-40 h-40 bg-emerald-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 pointer-events-none" />
 
           <div className="relative z-10 flex flex-col gap-4 sm:gap-5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <TeamAvatar teamName={displayMatch.teamA} size={52} className="ring-2 ring-white/10" />
-                <div className="min-w-0 flex-1">
-                  <h1 className="text-lg sm:text-2xl md:text-3xl font-black text-white capitalize truncate leading-tight">
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-x-2 sm:gap-x-4 md:gap-6 items-start">
+              <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 min-w-0">
+                <TeamAvatar teamName={displayMatch.teamA} size={56} className="ring-2 ring-white/10 shrink-0" />
+                <div className="min-w-0 flex-1 text-center sm:text-left w-full">
+                  <h1 className="text-[15px] leading-snug sm:text-2xl md:text-3xl font-black text-white capitalize text-balance sm:truncate">
                     {displayMatch.teamA}
                   </h1>
-                  <div className="mt-1 flex items-center gap-2 flex-wrap text-[11px] sm:text-xs text-gray-500">
-                    {displayMatch.status === 'live' && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/15 px-2 py-0.5 text-red-300 font-bold uppercase tracking-wide border border-red-500/25">
-                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-                        Live
-                      </span>
-                    )}
-                    {displayMatch.status === 'completed' && (
-                      <span className="text-gray-400 uppercase tracking-wide">Completed</span>
-                    )}
-                    {displayMatch.status === 'upcoming' && (
-                      <span className="text-sky-300 uppercase tracking-wide">Upcoming</span>
-                    )}
-                    {displayMatch.completedAt && (
-                      <span className="text-gray-600 normal-case">
-                        {new Date(displayMatch.completedAt).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
                 </div>
               </div>
 
-              <div className="hidden sm:flex items-center justify-center px-3 text-gray-600 font-light text-xl shrink-0">
-                vs
+              <div className="flex flex-col items-center justify-start gap-1.5 px-0.5 pt-1 sm:pt-2 min-w-[2.75rem] sm:min-w-[3rem]">
+                <span className="text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-[0.2em]">
+                  vs
+                </span>
+                {displayMatch.status === 'live' && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] sm:text-xs text-red-300 font-bold uppercase tracking-wide border border-red-500/25">
+                    <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                    Live
+                  </span>
+                )}
+                {displayMatch.status === 'completed' && (
+                  <span className="text-[9px] sm:text-xs text-gray-400 uppercase tracking-wide text-center leading-tight">
+                    Completed
+                  </span>
+                )}
+                {displayMatch.status === 'upcoming' && (
+                  <span className="text-[9px] sm:text-xs text-sky-300 uppercase tracking-wide text-center leading-tight">
+                    Upcoming
+                  </span>
+                )}
+                {displayMatch.completedAt && (
+                  <span className="text-[9px] sm:text-[10px] text-gray-600 text-center max-w-[5.5rem] sm:max-w-none leading-tight">
+                    {new Date(displayMatch.completedAt).toLocaleString()}
+                  </span>
+                )}
+                {displayMatch.status === 'upcoming' && displayMatch.scheduledStartAt && (
+                  <p className="text-[9px] sm:text-[10px] text-sky-300/90 text-center max-w-[6rem] sm:max-w-[10rem] leading-tight">
+                    {new Date(displayMatch.scheduledStartAt).toLocaleString()}
+                  </p>
+                )}
               </div>
 
-              <div className="flex items-center gap-3 min-w-0 flex-1 sm:flex-row-reverse">
-                <TeamAvatar teamName={displayMatch.teamB} size={52} className="ring-2 ring-white/10" />
-                <div className="min-w-0 flex-1 sm:text-right">
-                  <h1 className="text-lg sm:text-2xl md:text-3xl font-black text-white capitalize truncate leading-tight sm:ml-auto">
+              <div className="flex flex-col sm:flex-row-reverse items-center gap-2 sm:gap-4 min-w-0">
+                <TeamAvatar teamName={displayMatch.teamB} size={56} className="ring-2 ring-white/10 shrink-0" />
+                <div className="min-w-0 flex-1 text-center sm:text-right w-full">
+                  <h1 className="text-[15px] leading-snug sm:text-2xl md:text-3xl font-black text-white capitalize text-balance sm:truncate sm:ml-auto">
                     {displayMatch.teamB}
                   </h1>
-                  {displayMatch.status === 'upcoming' && displayMatch.scheduledStartAt && (
-                    <p className="mt-1 text-[11px] text-sky-300/90">
-                      Starts {new Date(displayMatch.scheduledStartAt).toLocaleString()}
-                    </p>
-                  )}
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div className="flex items-center gap-3 rounded-2xl bg-gray-900/60 border border-gray-700/60 px-3 py-3 sm:p-4 min-w-0">
-                <TeamAvatar teamName={displayMatch.teamA} size={44} />
+                <TeamAvatar teamName={displayMatch.teamA} size={48} />
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider truncate">
                     {displayMatch.teamA}
@@ -391,7 +395,7 @@ export default function MatchPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3 rounded-2xl bg-gray-900/60 border border-gray-700/60 px-3 py-3 sm:p-4 min-w-0 flex-row-reverse text-right">
-                <TeamAvatar teamName={displayMatch.teamB} size={44} />
+                <TeamAvatar teamName={displayMatch.teamB} size={48} />
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider truncate">
                     {displayMatch.teamB}
@@ -424,9 +428,17 @@ export default function MatchPage() {
                 <p className="text-xs font-bold uppercase tracking-widest text-indigo-300 mb-2">Next scheduled</p>
                 <Link
                   href={`/matches/${scheduleInfo.nextMatch._id}`}
-                  className="text-lg font-bold text-white hover:text-indigo-300"
+                  className="inline-flex flex-wrap items-center gap-2 text-lg font-bold text-white hover:text-indigo-300"
                 >
-                  {scheduleInfo.nextMatch.teamA} vs {scheduleInfo.nextMatch.teamB}
+                  <span className="inline-flex items-center gap-1.5">
+                    <TeamAvatar teamName={scheduleInfo.nextMatch.teamA} size={28} />
+                    <span className="capitalize">{scheduleInfo.nextMatch.teamA}</span>
+                  </span>
+                  <span className="text-gray-500 font-normal">vs</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <TeamAvatar teamName={scheduleInfo.nextMatch.teamB} size={28} />
+                    <span className="capitalize">{scheduleInfo.nextMatch.teamB}</span>
+                  </span>
                 </Link>
                 {scheduleInfo.nextMatch.scheduledStartAt && (
                   <p className="text-sm text-gray-400 mt-1">
@@ -441,10 +453,21 @@ export default function MatchPage() {
                 <ul className="space-y-2">
                   {scheduleInfo.tomorrowMatches.map((m) => (
                     <li key={m._id}>
-                      <Link href={`/matches/${m._id}`} className="text-indigo-400 hover:underline">
-                        {m.teamA} vs {m.teamB}
+                      <Link
+                        href={`/matches/${m._id}`}
+                        className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-indigo-400 hover:underline"
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          <TeamAvatar teamName={m.teamA} size={24} />
+                          <span className="capitalize">{m.teamA}</span>
+                        </span>
+                        <span className="text-gray-500">vs</span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <TeamAvatar teamName={m.teamB} size={24} />
+                          <span className="capitalize">{m.teamB}</span>
+                        </span>
                         {m.scheduledStartAt && (
-                          <span className="text-gray-500 ml-2">
+                          <span className="text-gray-500 w-full sm:w-auto sm:ml-2">
                             {new Date(m.scheduledStartAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         )}

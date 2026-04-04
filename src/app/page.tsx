@@ -14,19 +14,25 @@ export default function Home() {
           <span className="text-indigo-400 font-semibold text-sm tracking-widest uppercase">The Next Gen of Fantasy Cricket</span>
         </div>
         
-        <h1 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-400 to-red-500 mb-6 drop-shadow-sm leading-tight">
+        <h1 className="text-4xl sm:text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-400 to-red-500 mb-5 sm:mb-6 drop-shadow-sm leading-tight px-2">
           CrickPredict
         </h1>
         
-        <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-3xl font-light">
+        <p className="text-base sm:text-xl md:text-2xl text-gray-300 mb-10 sm:mb-12 max-w-3xl font-light leading-relaxed px-1">
           Predict live IPL balls, overs, and batsman performance in real-time. Use your skill to accumulate coins and climb the global leaderboards.
         </p>
         
-        <div className="flex flex-col sm:flex-row gap-6">
-          <Link href="/login" className="px-10 py-5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-2xl font-bold text-lg transition-all transform hover:-translate-y-1 shadow-[0_10px_40px_rgba(79,70,229,0.4)] flex items-center justify-center gap-2">
-            Start Playing <span className="text-2xl leading-none">&rarr;</span>
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 w-full max-w-md sm:max-w-none">
+          <Link
+            href="/login"
+            className="px-8 sm:px-10 py-4 sm:py-5 bg-gradient-to-r from-indigo-600 to-purple-600 active:scale-[0.98] hover:from-indigo-500 hover:to-purple-500 text-white rounded-2xl font-bold text-base sm:text-lg transition-all sm:transform sm:hover:-translate-y-1 shadow-[0_10px_40px_rgba(79,70,229,0.4)] flex items-center justify-center gap-2 min-h-[3.25rem]"
+          >
+            Start Playing <span className="text-xl sm:text-2xl leading-none">&rarr;</span>
           </Link>
-          <Link href="/register" className="px-10 py-5 bg-gray-800/80 hover:bg-gray-700/80 border border-gray-700 backdrop-blur-md text-white rounded-2xl font-bold text-lg transition-all transform hover:-translate-y-1 shadow-lg">
+          <Link
+            href="/register"
+            className="px-8 sm:px-10 py-4 sm:py-5 bg-gray-800/80 active:scale-[0.98] hover:bg-gray-700/80 border border-gray-700 backdrop-blur-md text-white rounded-2xl font-bold text-base sm:text-lg transition-all sm:transform sm:hover:-translate-y-1 shadow-lg min-h-[3.25rem] flex items-center justify-center"
+          >
             Create Free Account
           </Link>
         </div>

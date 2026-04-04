@@ -150,7 +150,7 @@ export default function WalletPage() {
   const pendingDeposits = depositRequests.filter((d) => d.status === 'pending').length;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6 md:p-10 pb-24 md:pb-10">
+    <div className="min-h-screen bg-gray-900 text-white p-6 md:p-10 pb-mobile-nav">
       <div className="max-w-5xl mx-auto space-y-8">
         <h1 className="text-4xl font-black border-b border-gray-800 pb-4">Wallet & Payments</h1>
 

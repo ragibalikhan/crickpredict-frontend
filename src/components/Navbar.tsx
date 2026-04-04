@@ -202,7 +202,7 @@ export default function Navbar() {
       </nav>
 
       {/* Mobile bottom tab bar */}
-      <div className="md:hidden fixed bottom-0 left-0 w-full bg-gray-900/95 backdrop-blur-md border-t border-gray-800 flex justify-around py-3 z-50">
+      <div className="md:hidden fixed bottom-0 left-0 w-full bg-gray-900/95 backdrop-blur-md border-t border-gray-800 flex justify-around items-end pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50">
         {[
           { href: '/dashboard', icon: '🏏', label: 'Matches' },
           { href: '/leaderboard', icon: '🏆', label: 'Rank' },
@@ -210,8 +210,15 @@ export default function Navbar() {
           { href: '/refer', icon: '🎁', label: 'Refer' },
           { href: '/profile', icon: '👤', label: 'Profile' },
         ].map(item => (
-          <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-1 text-xs ${pathname.startsWith(item.href) ? 'text-yellow-400' : 'text-gray-500'}`}>
-            <span className="text-xl">{item.icon}</span>{item.label}
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`flex min-w-[3.25rem] flex-col items-center gap-0.5 rounded-xl px-2 py-1 text-[10px] font-semibold transition active:scale-95 ${
+              pathname.startsWith(item.href) ? 'text-yellow-400' : 'text-gray-500 active:text-gray-400'
+            }`}
+          >
+            <span className="text-[1.35rem] leading-none">{item.icon}</span>
+            {item.label}
           </Link>
         ))}
       </div>

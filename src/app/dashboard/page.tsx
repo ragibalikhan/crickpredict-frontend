@@ -59,15 +59,22 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-6 md:p-12 touch-manipulation">
+    <div className="min-h-screen bg-gray-900 text-white px-4 py-6 pb-mobile-nav sm:p-6 md:p-12 touch-manipulation">
       <div className="max-w-6xl mx-auto w-full min-w-0">
         <header className="mb-8 sm:mb-12 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-6">
-          <div>
-            <h1 className="text-4xl font-black mb-2">Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">{user?.username}</span></h1>
-            <p className="text-gray-400">Ready to make some predictions? Check out the live matches below.</p>
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-4xl font-black mb-2 break-words">
+              Welcome back,{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
+                {user?.username}
+              </span>
+            </h1>
+            <p className="text-gray-400 text-sm sm:text-base leading-relaxed">
+              Ready to make some predictions? Check out the live matches below.
+            </p>
           </div>
           
-          <div className="bg-gray-800/80 p-4 rounded-2xl border border-gray-700/50 flex gap-6 shadow-xl backdrop-blur-sm shadow-indigo-900/20">
+          <div className="bg-gray-800/80 p-4 rounded-2xl border border-gray-700/50 flex gap-4 sm:gap-6 shadow-xl backdrop-blur-sm shadow-indigo-900/20 shrink-0 justify-center md:justify-end">
              <div className="text-center">
                <p className="text-sm text-gray-400 font-medium">Rank</p>
                <p className="text-2xl font-black text-white">#{user?.rank || '--'}</p>
@@ -117,12 +124,14 @@ export default function Dashboard() {
                       Over {match.currentOver}.{match.currentBall}
                     </span>
                   </div>
-                  <div className="flex items-center justify-center gap-2 sm:gap-4 mb-4 sm:mb-6 min-w-0">
-                    <TeamAvatar teamName={match.teamA} size={44} className="sm:w-12 sm:h-12 shrink-0" />
-                    <span className="text-gray-500 text-sm sm:text-lg font-medium shrink-0">vs</span>
-                    <TeamAvatar teamName={match.teamB} size={44} className="sm:w-12 sm:h-12 shrink-0" />
+                  <div className="flex items-center justify-center gap-3 sm:gap-5 mb-4 sm:mb-6 min-w-0">
+                    <TeamAvatar teamName={match.teamA} size={52} className="shrink-0 ring-2 ring-white/10" />
+                    <span className="text-gray-500 text-xs sm:text-lg font-bold uppercase tracking-widest shrink-0">
+                      vs
+                    </span>
+                    <TeamAvatar teamName={match.teamB} size={52} className="shrink-0 ring-2 ring-white/10" />
                   </div>
-                  <h3 className="text-base sm:text-xl font-black text-white mb-4 text-center leading-snug line-clamp-2 min-h-[2.5rem]">
+                  <h3 className="text-sm sm:text-xl font-black text-white mb-4 text-center leading-snug line-clamp-2 min-h-[2.5rem] px-1">
                     <span className="capitalize">{match.teamA}</span>
                     <span className="text-gray-500 font-normal mx-1.5">vs</span>
                     <span className="capitalize">{match.teamB}</span>
@@ -130,7 +139,7 @@ export default function Dashboard() {
                   <div className="bg-gray-900/50 p-3 sm:p-4 rounded-xl border border-gray-700/50 space-y-2.5 sm:space-y-3">
                     <div className="flex justify-between items-center gap-2">
                       <span className="text-xs sm:text-sm text-gray-400 capitalize truncate min-w-0 flex items-center gap-2">
-                        <TeamAvatar teamName={match.teamA} size={28} className="shrink-0" />
+                        <TeamAvatar teamName={match.teamA} size={32} className="shrink-0" />
                         {match.teamA}
                       </span>
                       <span className="font-mono text-base sm:text-lg font-bold text-white tabular-nums shrink-0">
@@ -139,7 +148,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex justify-between items-center gap-2">
                       <span className="text-xs sm:text-sm text-gray-400 capitalize truncate min-w-0 flex items-center gap-2">
-                        <TeamAvatar teamName={match.teamB} size={28} className="shrink-0" />
+                        <TeamAvatar teamName={match.teamB} size={32} className="shrink-0" />
                         {match.teamB}
                       </span>
                       <span className="font-mono text-base sm:text-lg font-bold text-white tabular-nums shrink-0">
