@@ -3,7 +3,12 @@ import { persist } from 'zustand/middleware';
 
 const isNewerMatch = (current: MatchState | null, incoming: any) => {
   if (!current) return true;
-  
+
+  // Innings advanced (e.g. chase started) — always accept so UI/scores are not stuck on 1st innings
+  const incInn = Number(incoming.currentInnings);
+  const curInn = Number(current.currentInnings);
+  if (Number.isFinite(incInn) && Number.isFinite(curInn) && incInn > curInn) return true;
+
   // 1. Check updatedAt
   if (incoming.updatedAt && current.updatedAt) {
     const nextTime = new Date(incoming.updatedAt).getTime();

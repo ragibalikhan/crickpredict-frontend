@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { getTeamBrand } from '../lib/teamLogos';
 
 type Props = {
@@ -11,17 +11,18 @@ type Props = {
 };
 
 /**
- * Franchise logo when available (Wikimedia), else initials on a team-colored disc.
+ * Franchise logo: tries bundled `/teams/*.png` then remote fallback; else initials on a team-colored disc.
  */
 export default function TeamAvatar({ teamName, size = 48, className = '' }: Props) {
   const meta = getTeamBrand(teamName);
-  const [imgFailed, setImgFailed] = useState(false);
-  const showImg = meta.logoUrl && !imgFailed;
+  const urls = useMemo(() => meta.logoUrls ?? [], [meta.logoUrls]);
+  const [failIdx, setFailIdx] = useState(0);
+  const src = urls[failIdx];
 
   const dim = { width: size, height: size };
   const altLabel = `${teamName || 'Team'} logo`;
 
-  if (!showImg) {
+  if (!src) {
     return (
       <div
         className={`flex shrink-0 items-center justify-center rounded-full font-black uppercase tracking-tighter text-white shadow-inner ring-2 ring-white/15 ${className}`}
@@ -40,13 +41,14 @@ export default function TeamAvatar({ teamName, size = 48, className = '' }: Prop
       style={dim}
     >
       <Image
-        src={meta.logoUrl!}
+        key={src}
+        src={src}
         alt={altLabel}
         width={size}
         height={size}
         className="object-cover"
         sizes={`${size}px`}
-        onError={() => setImgFailed(true)}
+        onError={() => setFailIdx((f) => f + 1)}
         unoptimized
       />
     </div>
