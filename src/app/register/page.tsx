@@ -66,9 +66,20 @@ function RegisterForm() {
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center justify-center gap-2 text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">
-            {logoSrc && <img src={logoSrc} alt="" className="h-9 w-9 object-contain rounded shrink-0" width={36} height={36} />}
-            {siteName}
+          <Link
+            href="/"
+            className={
+              logoSrc
+                ? 'inline-flex items-center justify-center'
+                : 'text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500'
+            }
+            aria-label={siteName}
+          >
+            {logoSrc ? (
+              <img src={logoSrc} alt={siteName} className="h-9 w-9 object-contain rounded shrink-0" width={36} height={36} />
+            ) : (
+              siteName
+            )}
           </Link>
           <p className="text-gray-400 mt-2">Create your free account</p>
         </div>

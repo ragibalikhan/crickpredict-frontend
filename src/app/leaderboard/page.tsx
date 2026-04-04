@@ -8,8 +8,6 @@ type LeaderRow = {
   username: string;
   coinsBalance: number;
   currentStreak: number;
-  totalWins: number;
-  totalLosses: number;
 };
 
 export default function LeaderboardPage() {
@@ -52,7 +50,7 @@ export default function LeaderboardPage() {
           <div className="bg-gray-800/60 rounded-3xl p-4 md:p-8 shadow-2xl backdrop-blur-md border border-gray-700/50">
             <div className="flex justify-between items-center px-6 py-4 text-sm font-bold text-gray-400 uppercase tracking-wider border-b border-gray-700/50 mb-4">
                <div>Rank & Player</div>
-               <div className="hidden md:block text-center flex-1">Streak/Win rate</div>
+               <div className="hidden md:block text-center flex-1">Streak</div>
                <div className="text-right">Net Worth</div>
             </div>
             
@@ -80,14 +78,10 @@ export default function LeaderboardPage() {
                       </div>
                     </div>
                     
-                    <div className="hidden md:flex flex-1 justify-center items-center gap-6">
+                    <div className="hidden md:flex flex-1 justify-center items-center">
                        <div className="text-center">
                           <span className="text-emerald-400 font-bold block">{leader.currentStreak} 🔥</span>
                           <span className="text-xs text-gray-500">Streak</span>
-                       </div>
-                       <div className="text-center">
-                          <span className="text-white font-bold block">{leader.totalWins}/{leader.totalWins + leader.totalLosses || 1}</span>
-                          <span className="text-xs text-gray-500">W/L</span>
                        </div>
                     </div>
                     
