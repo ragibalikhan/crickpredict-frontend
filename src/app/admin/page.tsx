@@ -24,10 +24,11 @@ type Tab =
   | 'accounts'
   | 'notify'
   | 'multipliers'
-  | 'bonus';
+  | 'bonus'
+  | 'branding';
 
 export default function AdminPage() {
-  const { token, user } = useStore();
+  const { token, user, setSiteBranding, siteBranding } = useStore();
   const router = useRouter();
 
   useEffect(() => {
@@ -89,6 +90,10 @@ export default function AdminPage() {
     bonusExpiryDays: 30,
   });
   const [bonusDraft, setBonusDraft] = useState({ ...bonusSettings });
+  const [brandingDraft, setBrandingDraft] = useState({
+    siteName: 'CrickPredict',
+    siteDescription: 'Real-time IPL skill gaming platform',
+  });
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({ coinsBalance: '', creditsBalance: '', note: '' });
 
@@ -162,6 +167,21 @@ export default function AdminPage() {
     });
   }, [token]);
 
+  const fetchBrandingSettings = useCallback(async () => {
+    const res = await fetch(`${API_BASE}/admin/settings/site-branding`, { headers });
+    if (!res.ok) return;
+    const d = await res.json();
+    setBrandingDraft({
+      siteName: d.siteName ?? 'CrickPredict',
+      siteDescription: d.siteDescription ?? 'Real-time IPL skill gaming platform',
+    });
+    setSiteBranding({
+      siteName: d.siteName ?? 'CrickPredict',
+      siteDescription: d.siteDescription ?? 'Real-time IPL skill gaming platform',
+      logoUrl: d.logoUrl ?? null,
+    });
+  }, [token, setSiteBranding]);
+
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     const res = await fetch(`${API_BASE}/admin/users`, { headers });
@@ -204,11 +224,24 @@ export default function AdminPage() {
     if (activeTab === 'accounts') fetchAccounts();
     if (activeTab === 'multipliers') fetchBallMultipliers();
     if (activeTab === 'bonus') fetchBonusSettings();
+    if (activeTab === 'branding') fetchBrandingSettings();
     if (activeTab === 'overview') {
       fetchMatchBetting();
       fetchBetOutcomeStats();
     }
-  }, [activeTab, token, fetchMatchBetting, fetchBetOutcomeStats]);
+  }, [
+    activeTab,
+    token,
+    fetchMatchBetting,
+    fetchBetOutcomeStats,
+    fetchUsers,
+    fetchWithdrawals,
+    fetchDeposits,
+    fetchAccounts,
+    fetchBallMultipliers,
+    fetchBonusSettings,
+    fetchBrandingSettings,
+  ]);
 
   const saveCoinRate = async () => {
     const n = Number(coinRateDraft);
@@ -268,6 +301,62 @@ export default function AdminPage() {
     } else {
       const d = await res.json();
       showToast(d.message || 'Failed', 'error');
+    }
+    setActionLoading(null);
+  };
+
+  const saveBrandingText = async () => {
+    setActionLoading('branding');
+    const res = await fetch(`${API_BASE}/admin/settings/site-branding`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        siteName: brandingDraft.siteName,
+        siteDescription: brandingDraft.siteDescription,
+      }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      showToast('Site name & description updated');
+      setSiteBranding({
+        siteName: d.siteName,
+        siteDescription: d.siteDescription,
+        logoUrl: d.logoUrl ?? null,
+      });
+      if (typeof document !== 'undefined') {
+        document.title = d.siteName;
+      }
+      fetchBrandingSettings();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.message || 'Failed to update branding', 'error');
+    }
+    setActionLoading(null);
+  };
+
+  const uploadSiteLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setActionLoading('brandingLogo');
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`${API_BASE}/admin/settings/site-branding/logo`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    });
+    if (res.ok) {
+      const d = await res.json();
+      showToast('Logo updated');
+      setSiteBranding({
+        siteName: d.siteName,
+        siteDescription: d.siteDescription,
+        logoUrl: d.logoUrl ?? null,
+      });
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.message || 'Upload failed', 'error');
     }
     setActionLoading(null);
   };
@@ -502,6 +591,7 @@ export default function AdminPage() {
     { id: 'accounts', label: 'Payment accounts', icon: '🏦' },
     { id: 'multipliers', label: 'Game Multipliers', icon: '🎯' },
     { id: 'bonus', label: 'Bonus Settings', icon: '🎁' },
+    { id: 'branding', label: 'Site branding', icon: '🎨' },
     { id: 'notify', label: 'Notify Users', icon: '🔔' },
   ];
 
@@ -1332,6 +1422,83 @@ export default function AdminPage() {
                   className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold disabled:opacity-50"
                 >
                   {actionLoading === 'ballMultipliers' ? 'Saving...' : 'Save multipliers'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'branding' && (
+          <div className="max-w-2xl space-y-6">
+            <div className="flex justify-between items-center flex-wrap gap-2">
+              <h2 className="text-xl font-bold">Site name, description & logo</h2>
+              <button
+                type="button"
+                onClick={fetchBrandingSettings}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm transition"
+              >
+                ↻ Refresh
+              </button>
+            </div>
+
+            <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-8 space-y-6">
+              <p className="text-sm text-gray-400">
+                Shown in the navbar, login/register, landing hero, and browser title. Logo: PNG, JPEG, WebP, or GIF up to 2 MB.
+              </p>
+
+              <div>
+                <label className="text-xs text-gray-500 uppercase font-bold tracking-wider">Site name</label>
+                <input
+                  type="text"
+                  className="block mt-1.5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 w-full text-white"
+                  value={brandingDraft.siteName}
+                  onChange={(e) => setBrandingDraft((d) => ({ ...d, siteName: e.target.value }))}
+                  maxLength={120}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 uppercase font-bold tracking-wider">Short description</label>
+                <textarea
+                  className="block mt-1.5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 w-full text-white min-h-[100px] resize-y"
+                  value={brandingDraft.siteDescription}
+                  onChange={(e) => setBrandingDraft((d) => ({ ...d, siteDescription: e.target.value }))}
+                  maxLength={500}
+                />
+                <p className="text-[10px] text-gray-500 mt-1">Landing page subtitle and meta description (max 500 characters).</p>
+              </div>
+
+              <div className="pt-2 border-t border-gray-700/50">
+                <label className="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-2">Logo image</label>
+                <div className="flex flex-wrap items-center gap-4">
+                  {siteBranding?.logoUrl && (
+                    <img
+                      src={`${API_BASE}${siteBranding.logoUrl}`}
+                      alt="Current logo"
+                      className="h-16 w-16 object-contain rounded-lg border border-gray-600 bg-gray-900 p-1"
+                    />
+                  )}
+                  <label className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold cursor-pointer disabled:opacity-50">
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      className="hidden"
+                      disabled={actionLoading === 'brandingLogo'}
+                      onChange={uploadSiteLogo}
+                    />
+                    {actionLoading === 'brandingLogo' ? 'Uploading…' : 'Upload new logo'}
+                  </label>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  disabled={actionLoading === 'branding'}
+                  onClick={saveBrandingText}
+                  className="w-full md:w-auto px-10 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50"
+                >
+                  {actionLoading === 'branding' ? 'Saving…' : 'Save name & description'}
                 </button>
               </div>
             </div>

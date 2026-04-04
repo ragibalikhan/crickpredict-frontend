@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import Navbar from '../components/Navbar';
+import SiteBrandingLoader from '../components/SiteBrandingLoader';
 import ToastProvider from '../components/ToastProvider';
 import BetSettlementModal from '../components/BetSettlementModal';
 import SettlementRecovery from '../components/SettlementRecovery';
@@ -25,6 +26,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-gray-900 text-white min-h-screen pt-16 selection:bg-indigo-500/30">
+        <SiteBrandingLoader />
         <Navbar />
         <ToastProvider />
         <BetSettlementModal />

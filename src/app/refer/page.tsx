@@ -38,7 +38,8 @@ interface ReferralStats {
 }
 
 export default function ReferPage() {
-  const { user, token } = useStore();
+  const { user, token, siteBranding } = useStore();
+  const siteName = siteBranding?.siteName ?? 'CrickPredict';
   const [bonusStatus, setBonusStatus] = useState<BonusStatus | null>(null);
   const [referralData, setReferralData] = useState<ReferralData | null>(null);
   const [referralStats, setReferralStats] = useState<ReferralStats | null>(null);
@@ -92,7 +93,7 @@ export default function ReferPage() {
 
   const shareWhatsApp = () => {
     if (!referralData) return;
-    const text = `🏏 Join me on CrickPredict! Use my referral code: ${referralData.referralCode} and get 50 bonus coins to start betting on live cricket! ${referralData.referralLink}`;
+    const text = `🏏 Join me on ${siteName}! Use my referral code: ${referralData.referralCode} and get 50 bonus coins to start betting on live cricket! ${referralData.referralLink}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -100,8 +101,8 @@ export default function ReferPage() {
     if (!referralData) return;
     if (navigator.share) {
       await navigator.share({
-        title: 'CrickPredict — Predict & Win',
-        text: `Join me on CrickPredict! Use code: ${referralData.referralCode} and get 50 bonus coins!`,
+        title: `${siteName} — Predict & Win`,
+        text: `Join me on ${siteName}! Use code: ${referralData.referralCode} and get 50 bonus coins!`,
         url: referralData.referralLink,
       });
     } else {

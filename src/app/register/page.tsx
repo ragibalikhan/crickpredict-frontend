@@ -14,7 +14,10 @@ function RegisterForm() {
   const [error, setError] = useState('');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const setUser = useStore(state => state.setUser);
+  const setUser = useStore((state) => state.setUser);
+  const siteBranding = useStore((s) => s.siteBranding);
+  const siteName = siteBranding?.siteName ?? 'CrickPredict';
+  const logoSrc = siteBranding?.logoUrl ? `${API_BASE}${siteBranding.logoUrl}` : null;
 
   // Auto-fill referral code from URL ?ref=
   useEffect(() => {
@@ -63,8 +66,9 @@ function RegisterForm() {
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <Link href="/" className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">
-            CrickPredict
+          <Link href="/" className="inline-flex items-center justify-center gap-2 text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">
+            {logoSrc && <img src={logoSrc} alt="" className="h-9 w-9 object-contain rounded shrink-0" width={36} height={36} />}
+            {siteName}
           </Link>
           <p className="text-gray-400 mt-2">Create your free account</p>
         </div>

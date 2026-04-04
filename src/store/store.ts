@@ -88,12 +88,21 @@ export interface BetSettlementResult {
   predictionType?: string;
 }
 
+export interface SiteBranding {
+  siteName: string;
+  siteDescription: string;
+  logoUrl: string | null;
+}
+
 interface AppState {
   user: User | null;
   token: string | null;
   liveMatch: MatchState | null;
   notifications: any[];
   betSettlementResult: BetSettlementResult | null;
+  /** Loaded from GET /public/site-branding; null until first fetch. */
+  siteBranding: SiteBranding | null;
+  setSiteBranding: (b: SiteBranding | null) => void;
   setUser: (user: User, token: string) => void;
   logout: () => void;
   setLiveMatch: (match: any) => void;
@@ -115,6 +124,8 @@ export const useStore = create<AppState>()(
       liveMatch: null,
       notifications: [],
       betSettlementResult: null,
+      siteBranding: null,
+      setSiteBranding: (siteBranding) => set({ siteBranding }),
       setUser: (user, token) => set({ user, token }),
       logout: () =>
         set({

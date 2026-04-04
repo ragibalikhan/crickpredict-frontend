@@ -1,6 +1,15 @@
+'use client';
+
 import Link from 'next/link';
+import { useStore } from '../store/store';
 
 export default function Home() {
+  const siteBranding = useStore((s) => s.siteBranding);
+  const siteName = siteBranding?.siteName ?? 'CrickPredict';
+  const siteDescription =
+    siteBranding?.siteDescription ??
+    'Predict live IPL balls, overs, and batsman performance in real-time. Use your skill to accumulate coins and climb the global leaderboards.';
+
   return (
     <div className="relative min-h-screen bg-gray-900 overflow-hidden">
       {/* Background gradients */}
@@ -15,11 +24,11 @@ export default function Home() {
         </div>
         
         <h1 className="text-4xl sm:text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-400 to-red-500 mb-5 sm:mb-6 drop-shadow-sm leading-tight px-2">
-          CrickPredict
+          {siteName}
         </h1>
         
         <p className="text-base sm:text-xl md:text-2xl text-gray-300 mb-10 sm:mb-12 max-w-3xl font-light leading-relaxed px-1">
-          Predict live IPL balls, overs, and batsman performance in real-time. Use your skill to accumulate coins and climb the global leaderboards.
+          {siteDescription}
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 w-full max-w-md sm:max-w-none">
