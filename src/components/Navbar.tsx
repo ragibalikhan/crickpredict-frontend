@@ -80,7 +80,7 @@ export default function Navbar() {
           aria-label={siteName}
         >
           {logoSrc ? (
-            <img src={logoSrc} alt={siteName} className="h-8 w-8 object-contain rounded shrink-0" width={32} height={32} />
+            <img src={logoSrc} alt={siteName} className="h-12 w-12 sm:h-14 sm:w-14 object-contain rounded shrink-0" width={56} height={56} />
           ) : (
             siteName
           )}
@@ -109,7 +109,7 @@ export default function Navbar() {
                 aria-label={siteName}
               >
                 {logoSrc ? (
-                  <img src={logoSrc} alt={siteName} className="h-8 w-8 object-contain rounded shrink-0" width={32} height={32} />
+                  <img src={logoSrc} alt={siteName} className="h-12 w-12 sm:h-14 sm:w-14 object-contain rounded shrink-0" width={56} height={56} />
                 ) : (
                   siteName
                 )}

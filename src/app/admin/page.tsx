@@ -1475,7 +1475,7 @@ export default function AdminPage() {
                     <img
                       src={`${API_BASE}${siteBranding.logoUrl}`}
                       alt="Current logo"
-                      className="h-16 w-16 object-contain rounded-lg border border-gray-600 bg-gray-900 p-1"
+                      className="h-24 w-24 sm:h-28 sm:w-28 object-contain rounded-lg border border-gray-600 bg-gray-900 p-1"
                     />
                   )}
                   <label className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold cursor-pointer disabled:opacity-50">

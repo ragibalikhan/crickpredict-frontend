@@ -59,7 +59,7 @@ export default function Login() {
             aria-label={siteName}
           >
             {logoSrc ? (
-              <img src={logoSrc} alt={siteName} className="h-9 w-9 object-contain rounded shrink-0" width={36} height={36} />
+              <img src={logoSrc} alt={siteName} className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded shrink-0" width={80} height={80} />
             ) : (
               siteName
             )}
