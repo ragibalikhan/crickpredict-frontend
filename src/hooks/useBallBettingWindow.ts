@@ -11,17 +11,18 @@ const BALL_BET_WINDOW_MS = BALL_BET_WINDOW_SECONDS * 1000;
  * (no free 15s — avoids resetting the window on every reload).
  */
 export function useBallBettingWindow(
+  currentInnings: number,
   currentOver: number,
   currentBall: number,
   enabled: boolean,
   matchId: string,
 ) {
-  const lastPhaseRef = useRef<{ o: number; b: number } | null>(null);
+  const lastProgressRef = useRef<number>(-1);
   const betOpenUntilRef = useRef<number>(0);
   const [, setTick] = useState(0);
 
   useEffect(() => {
-    lastPhaseRef.current = null;
+    lastProgressRef.current = -1;
     betOpenUntilRef.current = 0;
   }, [matchId]);
 
@@ -33,25 +34,30 @@ export function useBallBettingWindow(
   useEffect(() => {
     if (!enabled) return;
 
-    const prev = lastPhaseRef.current;
-    if (prev !== null && prev.o === currentOver && prev.b === currentBall) {
+    // Numerical progression value to ensure we only trigger on actual "forward" movement.
+    const currentProgress = (currentInnings * 1000) + (currentOver * 6) + currentBall;
+    const prevProgress = lastProgressRef.current;
+
+    if (prevProgress !== -1 && currentProgress <= prevProgress) {
+      // If we haven't moved forward, don't reset the timer.
       return;
     }
 
-    if (prev === null) {
-      // First tick after mount / match change / going live: sync phase, stay locked.
-      lastPhaseRef.current = { o: currentOver, b: currentBall };
+    if (prevProgress === -1) {
+      // First baseline: don't open the 15s window on mount/initial load.
+      lastProgressRef.current = currentProgress;
       return;
     }
 
+    // New ball detected! Start the 15s window.
     const now = Date.now();
     betOpenUntilRef.current = now + BALL_BET_WINDOW_MS;
-    lastPhaseRef.current = { o: currentOver, b: currentBall };
-  }, [currentOver, currentBall, enabled]);
+    lastProgressRef.current = currentProgress;
+  }, [currentInnings, currentOver, currentBall, enabled]);
 
   useEffect(() => {
     if (!enabled) {
-      lastPhaseRef.current = null;
+      lastProgressRef.current = -1;
     }
   }, [enabled]);
 

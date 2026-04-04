@@ -188,6 +188,7 @@ export default function MatchPage() {
   const overPhaseKey = String(displayMatch?.currentOver ?? 0);
 
   const ballBet = useBallBettingWindow(
+    displayMatch?.currentInnings ?? 1,
     displayMatch?.currentOver ?? 0,
     displayMatch?.currentBall ?? 0,
     matchLoad === 'ok' && displayMatch?.status === 'live',
@@ -463,22 +464,27 @@ export default function MatchPage() {
               return (
                 <div
                   key={slot}
-                  className={`flex aspect-square flex-col items-center justify-center rounded-2xl border-2 text-center transition duration-300 ${
+                  className={`relative flex aspect-square flex-col items-center justify-start rounded-2xl border-2 text-center transition duration-300 overflow-hidden ${
                     filled && last ? ballSlotClass(last, true) : ballSlotClass(undefined, false)
                   }`}
                 >
-                  <span className="text-[10px] font-bold uppercase tracking-tighter text-gray-500 mb-1">
-                    {slot}
+                  <span className="text-[10px] font-bold uppercase tracking-tighter text-white/40 mb-1 mt-2">
+                    Ball {slot}
                   </span>
-                  <span className="text-sm md:text-xl font-black tabular-nums leading-tight flex flex-col gap-0.5 min-h-[2rem] justify-center">
-                    {filled
-                      ? ballsInSlot.map((b) => (
-                          <span key={`${b.ballNumber}-${b.subBallNumber ?? 0}-${b.createdAt ?? ''}`}>
-                            {formatBallChip(b)}
-                          </span>
-                        ))
-                      : '—'}
-                  </span>
+                  <div className="flex-1 w-full flex items-center justify-center overflow-hidden px-1 pb-3">
+                    <div className="text-sm md:text-base font-black tabular-nums leading-none flex flex-row flex-wrap gap-1.5 justify-center items-center overflow-y-auto scrollbar-hide max-h-full py-1">
+                      {filled
+                        ? ballsInSlot.map((b) => (
+                            <span 
+                              key={`${b.ballNumber}-${b.subBallNumber ?? 0}-${b.createdAt ?? ''}`}
+                              className={`${b.outcome === 'Extras' ? 'text-[11px] md:text-xs opacity-90 px-1 py-0.5 rounded bg-black/20' : 'text-lg md:text-xl'}`}
+                            >
+                              {formatBallChip(b)}
+                            </span>
+                          ))
+                        : <span className="text-gray-600 opacity-40">—</span>}
+                    </div>
+                  </div>
                 </div>
               );
             })}
