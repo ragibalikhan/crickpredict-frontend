@@ -3,6 +3,7 @@ import './globals.css';
 import Navbar from '../components/Navbar';
 import ToastProvider from '../components/ToastProvider';
 import BetSettlementModal from '../components/BetSettlementModal';
+import SettlementRecovery from '../components/SettlementRecovery';
 
 export const metadata: Metadata = {
   title: 'CrickPredict',
@@ -20,6 +21,7 @@ export default function RootLayout({
         <Navbar />
         <ToastProvider />
         <BetSettlementModal />
+        <SettlementRecovery />
         {children}
       </body>
     </html>

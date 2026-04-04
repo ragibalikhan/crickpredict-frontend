@@ -182,10 +182,12 @@ export default function MatchPage() {
   const displayMatch = liveMatch;
 
   const ballsThisOver: BallSlot[] = displayMatch?.ballsThisOver || [];
+  /** Chronological order: extras (wides) appear when they happened, not by server ball index */
   const deliveries = [...ballsThisOver].sort((a, b) => {
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     if (ta !== tb) return ta - tb;
+    if ((a.ballNumber ?? 0) !== (b.ballNumber ?? 0)) return (a.ballNumber ?? 0) - (b.ballNumber ?? 0);
     return (a.subBallNumber ?? 0) - (b.subBallNumber ?? 0);
   });
   const legalCount = deliveries.filter(b => (b.subBallNumber ?? 0) === 0).length;
@@ -200,7 +202,8 @@ export default function MatchPage() {
     if (b.outcome === 'Wicket') return 'W';
     if (b.outcome === 'Dot' || (b.runs === 0 && !b.isWicket)) return '•';
     if (b.outcome === 'Extras') {
-      if (b.runs != null && b.runs > 1) return `Wd+${b.runs}`;
+      // 1+ penalty runs (wide/no-ball/byes lumped as "extras" in feed) — show Wd+1, Wd+2, …
+      if (b.runs != null && b.runs > 0) return `Wd+${b.runs}`;
       return 'Wd';
     }
     if (b.runs != null && b.runs > 0) return String(b.runs);
@@ -237,6 +240,7 @@ export default function MatchPage() {
     displayMatch?.currentInnings ?? 1,
     displayMatch?.currentOver ?? 0,
     displayMatch?.currentBall ?? 0,
+    displayMatch?.lastBallRecordedAt,
     matchLoad === 'ok' && displayMatch?.status === 'live',
     matchId,
   );
@@ -276,7 +280,9 @@ export default function MatchPage() {
             : 'Betting window for the next over is closed — wait for the next cycle.',
         );
       } else {
-        alert('Betting is closed until the next ball is released on the live feed (then you get 15 seconds to bet).');
+        alert(
+          'Betting is closed until the next delivery is recorded (legal ball or extra). You will get 15 seconds when that happens.',
+        );
       }
       return;
     }
@@ -493,6 +499,12 @@ export default function MatchPage() {
               <p className="text-xs text-gray-600 mt-2">
                 Dots, runs, and wickets appear here as the live feed records each ball (socket + poll).
               </p>
+              <p className="text-xs text-amber-200/80 mt-2 leading-snug max-w-xl">
+                <span className="font-semibold text-amber-300/90">Extras:</span> wides, no-balls, and penalty runs
+                add to the team score but are <span className="text-white/90">not</span> a legal delivery —{' '}
+                <span className="font-mono">Wd+1</span> means one run added from an extra, not “one run off the bat.”
+                {' '}<span className="text-gray-500">Ball 1–6 labels count only legal deliveries in order; extras sit in the timeline between them.</span>
+              </p>
             </div>
           </div>
           <p className="text-xs text-gray-500 mb-2">
@@ -500,7 +512,7 @@ export default function MatchPage() {
           </p>
           <div className="flex flex-wrap gap-3 mb-3 text-[11px] text-gray-500">
             <span>
-              <span className="inline-block w-3 h-3 rounded bg-orange-600 align-middle mr-1" /> Wd (wide / extras)
+              <span className="inline-block w-3 h-3 rounded bg-orange-600 align-middle mr-1" /> Wd+ = extras (not a legal ball)
             </span>
             <span>
               <span className="inline-block w-3 h-3 rounded bg-slate-600 align-middle mr-1" /> Dot
@@ -520,21 +532,40 @@ export default function MatchPage() {
           </div>
           <div className="flex flex-wrap gap-2 md:gap-3">
             {/* 1. Render all recorded deliveries (legal + extras) chronologically */}
-            {deliveries.map((b, idx) => (
+            {deliveries.map((b, idx) => {
+              const isExtra = (b.subBallNumber ?? 0) > 0;
+              /** 1..n = nth legal delivery this over (feed ball indices can skip after wides) */
+              const legalSeq = isExtra
+                ? null
+                : deliveries.slice(0, idx + 1).filter((x) => (x.subBallNumber ?? 0) === 0).length;
+              return (
               <div
                 key={`${b.ballNumber}-${b.subBallNumber ?? 0}-${idx}`}
                 className={`relative flex aspect-square w-[calc(25%-8px)] sm:w-[calc(16.66%-12px)] md:w-20 lg:w-24 flex-col items-center justify-center rounded-2xl border-2 text-center transition duration-300 overflow-hidden ${ballSlotClass(b, true)}`}
               >
-                <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-tighter text-white/40 mb-0.5">
-                  {(b.subBallNumber ?? 0) > 0 ? 'Extra' : `Ball ${b.ballNumber}`}
+                <span
+                  className="text-[9px] md:text-[10px] font-bold uppercase tracking-tighter text-white/40 mb-0.5"
+                  title={
+                    isExtra
+                      ? 'Wide / no-ball / penalty — does not count as a legal ball in this over'
+                      : undefined
+                  }
+                >
+                  {isExtra ? 'Extra' : `Ball ${legalSeq}`}
                 </span>
-                <div className="flex items-center justify-center px-1">
+                <div className="flex flex-col items-center justify-center px-1 gap-0.5">
                   <span className={`${b.outcome === 'Extras' ? 'text-xs md:text-sm font-bold opacity-90 px-1.5 py-0.5 rounded bg-black/20' : 'text-xl md:text-2xl font-black tabular-nums'}`}>
                     {formatBallChip(b)}
                   </span>
+                  {(b.subBallNumber ?? 0) > 0 && b.outcome === 'Extras' && (
+                    <span className="text-[8px] leading-none text-orange-200/70 font-medium normal-case">
+                      to team score
+                    </span>
+                  )}
                 </div>
               </div>
-            ))}
+            );
+            })}
 
             {/* 2. Render placeholders for the remaining legal balls in the over */}
             {placeholders.map((_, idx) => (
@@ -649,12 +680,12 @@ export default function MatchPage() {
                           ballBet.bettingOpen ? 'text-emerald-300' : 'text-amber-200'
                         }`}
                       >
-                        {ballBet.bettingOpen ? 'Place your bet' : 'Session closed — wait for next ball'}
+                        {ballBet.bettingOpen ? 'Place your bet' : 'Session closed — wait for next event'}
                       </p>
                       <p className="text-sm text-gray-400">
                         {ballBet.bettingOpen
                           ? `You have ${ballBet.secondsLeftInWindow}s left — betting closes when this window ends.`
-                          : 'When the live feed advances to the next ball, a new 15s betting window opens.'}
+                          : 'A new 15s window opens after each legal ball or after an extra (wide/no-ball) is recorded — even if the over counter does not move.'}
                       </p>
                     </>
                   )}

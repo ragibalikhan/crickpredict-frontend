@@ -25,12 +25,13 @@ export default function BetSettlementModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="settlement-title"
     >
       <div
+        key={betSettlementResult.predictionId}
         className={`w-full max-w-md rounded-3xl border bg-gray-900 p-8 shadow-2xl text-center ${
           won
             ? 'border-emerald-500/40 shadow-emerald-900/30'

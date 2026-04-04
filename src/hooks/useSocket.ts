@@ -27,7 +27,7 @@ export const useGlobalSocket = () => {
     if (needNewSocket) {
       globalSocket?.disconnect();
       globalSocket = io(SOCKET_BASE, {
-        query: { userId: user.id },
+        query: { userId: String(user.id) },
         transports: ['websocket'],
       });
       globalSocketUserId = user.id;
@@ -89,7 +89,7 @@ export const useSocket = (
     if (!matchId) return;
 
     const socket = io(SOCKET_BASE, {
-      query: { userId: user?.id || '' },
+      query: { userId: user?.id != null ? String(user.id) : '' },
       transports: ['websocket'],
     });
     socketRef.current = socket;

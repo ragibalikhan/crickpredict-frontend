@@ -1,6 +1,31 @@
 import { useStore } from '../store/store';
 
 const handledIds = new Set<string>();
+const STORAGE_KEY = 'crickpredict_settlement_ids_v1';
+let loadedFromStorage = false;
+
+function loadHandledFromStorage() {
+  if (typeof window === 'undefined' || loadedFromStorage) return;
+  loadedFromStorage = true;
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw) as string[];
+      arr.forEach((id) => handledIds.add(id));
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistHandledIds() {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...handledIds].slice(-400)));
+  } catch {
+    /* ignore */
+  }
+}
 
 export type PredictionResultPayload = {
   won: boolean;
@@ -9,6 +34,9 @@ export type PredictionResultPayload = {
   stake: number;
   payout: number;
   predictionType: string;
+  /** Present when event is broadcast on match_* — only this user should react */
+  targetUserId?: string;
+  matchId?: string;
 };
 
 /**
@@ -16,9 +44,17 @@ export type PredictionResultPayload = {
  * and pushes a notification. Deduplicates when both Socket.IO connections receive the same event.
  */
 export function handlePredictionResultEvent(data: PredictionResultPayload): void {
+  loadHandledFromStorage();
+
+  const me = useStore.getState().user?.id;
+  if (data.targetUserId != null && me != null && String(data.targetUserId) !== String(me)) {
+    return;
+  }
+
   const id = String(data.predictionId || '');
   if (!id || handledIds.has(id)) return;
   handledIds.add(id);
+  persistHandledIds();
   if (handledIds.size > 400) {
     const it = handledIds.values();
     for (let i = 0; i < 100; i++) {
@@ -26,6 +62,7 @@ export function handlePredictionResultEvent(data: PredictionResultPayload): void
       if (v.done) break;
       handledIds.delete(v.value);
     }
+    persistHandledIds();
   }
 
   if (typeof data.coinsBalance === 'number' && Number.isFinite(data.coinsBalance)) {
