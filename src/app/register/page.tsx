@@ -1,18 +1,26 @@
 'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useStore } from '../../store/store';
 import Link from 'next/link';
 import { API_BASE } from '../../lib/api';
 
-export default function Register() {
+function RegisterForm() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+  const searchParams = useSearchParams();
   const setUser = useStore(state => state.setUser);
+
+  // Auto-fill referral code from URL ?ref=
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) setReferralCode(ref.toUpperCase());
+  }, [searchParams]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,15 +29,22 @@ export default function Register() {
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     setLoading(true);
     try {
+      const body: Record<string, string> = { username, email, password };
+      if (referralCode.trim()) body.referralCode = referralCode.trim().toUpperCase();
+
       const res = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password })
+        body: JSON.stringify(body)
       });
 
       const data = await res.json();
       if (res.ok) {
         setUser(data.user, data.access_token);
+        // Flag signup bonus toast for dashboard
+        if (data.user.signupBonusStatus === 'locked') {
+          sessionStorage.setItem('signup_bonus_toast', '1');
+        }
         router.push('/dashboard');
       } else {
         setError(data.message || 'Registration failed. Username or email may already exist.');
@@ -57,6 +72,12 @@ export default function Register() {
         <form onSubmit={handleRegister} className="bg-gray-800/80 backdrop-blur-md p-8 rounded-3xl shadow-2xl border border-gray-700/50">
           <h2 className="text-2xl font-black mb-2 text-white">Get Started 🚀</h2>
           <p className="text-gray-400 text-sm mb-6">Start with 1,000 free coins on signup!</p>
+
+          {referralCode && (
+            <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm flex items-center gap-2">
+              🎁 Referral code <strong>{referralCode}</strong> applied — get 50 bonus coins!
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
@@ -100,6 +121,19 @@ export default function Register() {
                 autoComplete="new-password"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">
+                Referral Code <span className="text-gray-600">(optional — get 50 bonus coins!)</span>
+              </label>
+              <input
+                id="reg-referral"
+                className="w-full bg-gray-900/80 text-white px-4 py-3 rounded-xl border border-gray-700 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition uppercase tracking-widest font-mono"
+                placeholder="e.g. ABC123XY"
+                value={referralCode}
+                onChange={e => setReferralCode(e.target.value.toUpperCase())}
+                maxLength={10}
+              />
+            </div>
           </div>
 
           <button
@@ -126,5 +160,17 @@ export default function Register() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function Register() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <RegisterForm />
+    </Suspense>
   );
 }

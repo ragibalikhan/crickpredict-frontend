@@ -91,6 +91,7 @@ export default function Navbar() {
                   { href: '/dashboard', label: '🏏 Matches' },
                   { href: '/leaderboard', label: '🏆 Leaderboard' },
                   { href: '/wallet', label: '💰 Wallet' },
+                  { href: '/refer', label: '🎁 Refer & Earn' },
                   ...(user.role === 'admin' ? [{ href: '/admin', label: '⚙️ Admin' }] : []),
                 ].map(link => (
                   <Link
@@ -179,6 +180,7 @@ export default function Navbar() {
                     {[
                       { href: '/profile', icon: '👤', label: 'My Profile' },
                       { href: '/wallet', icon: '💰', label: 'Wallet & UPI' },
+                      { href: '/refer', icon: '🎁', label: 'Refer & Earn' },
                       { href: '/leaderboard', icon: '🏆', label: 'Leaderboard' },
                       ...(user.role === 'admin' ? [{ href: '/admin', icon: '⚙️', label: 'Admin Panel' }] : []),
                     ].map(item => (
@@ -205,6 +207,7 @@ export default function Navbar() {
           { href: '/dashboard', icon: '🏏', label: 'Matches' },
           { href: '/leaderboard', icon: '🏆', label: 'Rank' },
           { href: '/wallet', icon: '💰', label: 'Wallet' },
+          { href: '/refer', icon: '🎁', label: 'Refer' },
           { href: '/profile', icon: '👤', label: 'Profile' },
         ].map(item => (
           <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-1 text-xs ${pathname.startsWith(item.href) ? 'text-yellow-400' : 'text-gray-500'}`}>

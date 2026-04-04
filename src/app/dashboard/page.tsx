@@ -47,6 +47,16 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, [token]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && sessionStorage.getItem('signup_bonus_toast')) {
+      // Small delay to ensure the UI is rendered
+      setTimeout(() => {
+        alert('🎉 You received 50 coins signup bonus! Deposit ₹100 to unlock it.');
+        sessionStorage.removeItem('signup_bonus_toast');
+      }, 500);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6 md:p-12">
       <div className="max-w-6xl mx-auto">

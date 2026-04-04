@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
-const backend = process.env.BACKEND_URL || "http://localhost:3000";
+/** Prefer 127.0.0.1 on Windows — `localhost` can resolve to ::1 while Nest listens on IPv4 only. */
+const backend = process.env.BACKEND_URL || "http://127.0.0.1:3000";
 
 const nextConfig: NextConfig = {
   async rewrites() {

@@ -13,6 +13,11 @@ export interface User {
   highestStreak?: number;
   totalWins?: number;
   totalLosses?: number;
+  // Referral & Bonus fields
+  referralCode?: string;
+  referredBy?: string | null;
+  signupBonusStatus?: 'none' | 'locked' | 'unlocked' | 'wagering' | 'withdrawable' | 'expired';
+  signupBonusAmount?: number;
 }
 
 export interface BallSlot {
