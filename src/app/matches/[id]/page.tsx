@@ -190,10 +190,21 @@ export default function MatchPage() {
     if ((a.ballNumber ?? 0) !== (b.ballNumber ?? 0)) return (a.ballNumber ?? 0) - (b.ballNumber ?? 0);
     return (a.subBallNumber ?? 0) - (b.subBallNumber ?? 0);
   });
-  const legalCount = deliveries.filter(b => (b.subBallNumber ?? 0) === 0).length;
-  const placeholders = Array.from({ length: Math.max(0, 6 - legalCount) });
-
   const co = displayMatch?.currentOver ?? 0;
+  /** Legal deliveries completed in this over per the live feed (0–6). Trust this over inferred DB rows. */
+  const feedLegalBalls = Math.min(6, Math.max(0, displayMatch?.currentBall ?? 0));
+
+  const visibleDeliveries = deliveries.filter((b) => {
+    const bn = b.ballNumber ?? 0;
+    if ((b.subBallNumber ?? 0) > 0) {
+      return bn <= feedLegalBalls + 1;
+    }
+    return bn <= feedLegalBalls;
+  });
+
+  const legalCount = visibleDeliveries.filter((b) => (b.subBallNumber ?? 0) === 0).length;
+  const placeholders = Array.from({ length: Math.max(0, 6 - feedLegalBalls) });
+
   const cb = displayMatch?.currentBall ?? 0;
   const nextBallInOver = cb < 6 ? cb + 1 : 1;
 
@@ -216,6 +227,9 @@ export default function MatchPage() {
     if (b.isWicket || b.outcome === 'Wicket') {
       return 'border-red-500/70 bg-red-950/55 text-red-100 shadow-[0_0_20px_rgba(239,68,68,0.12)]';
     }
+    if (b.outcome === 'Extras') {
+      return 'border-orange-500/55 bg-orange-950/35 text-orange-200';
+    }
     if (b.outcome === '4 Runs' || b.runs === 4) {
       return 'border-amber-500/70 bg-amber-950/45 text-amber-200';
     }
@@ -224,9 +238,6 @@ export default function MatchPage() {
     }
     if (b.outcome === '1-2 Runs' || (b.runs != null && b.runs > 0 && b.runs <= 2)) {
       return 'border-sky-500/55 bg-sky-950/35 text-sky-100';
-    }
-    if (b.outcome === 'Extras') {
-      return 'border-orange-500/55 bg-orange-950/35 text-orange-200';
     }
     if (b.outcome === 'Dot' || (b.runs === 0 && !b.isWicket)) {
       return 'border-slate-500/55 bg-slate-900/60 text-slate-200';
@@ -316,9 +327,9 @@ export default function MatchPage() {
     );
   }
 
-  const ballsLogged = displayMatch.ballsThisOver?.length ?? 0;
   const feedBowled = displayMatch.currentBall ?? 0;
-  const shownBowled = Math.max(feedBowled, ballsLogged);
+  /** Legal balls completed per feed — do not inflate with DB extras or over-inferred rows */
+  const shownBowled = feedLegalBalls;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white px-3 pt-4 pb-mobile-nav sm:p-4 md:p-8 font-sans touch-manipulation">
@@ -514,9 +525,9 @@ export default function MatchPage() {
                   <span className="text-gray-600"> · Feed over reading {co}.{feedBowled}</span>
                 )}
               </p>
-              {ballsLogged < feedBowled && feedBowled > 0 && (
+              {legalCount < feedBowled && feedBowled > 0 && (
                 <p className="text-xs text-amber-400/90 mt-1">
-                  Catching up ball-by-ball log ({ballsLogged}/{feedBowled} recorded)…
+                  Catching up ball-by-ball log ({legalCount}/{feedBowled} legal deliveries recorded)…
                 </p>
               )}
               <p className="text-xs text-gray-600 mt-2">
@@ -555,12 +566,12 @@ export default function MatchPage() {
           </div>
           <div className="flex flex-wrap gap-2 md:gap-3">
             {/* 1. Render all recorded deliveries (legal + extras) chronologically */}
-            {deliveries.map((b, idx) => {
+            {visibleDeliveries.map((b, idx) => {
               const isExtra = (b.subBallNumber ?? 0) > 0;
               /** 1..n = nth legal delivery this over (feed ball indices can skip after wides) */
               const legalSeq = isExtra
                 ? null
-                : deliveries.slice(0, idx + 1).filter((x) => (x.subBallNumber ?? 0) === 0).length;
+                : visibleDeliveries.slice(0, idx + 1).filter((x) => (x.subBallNumber ?? 0) === 0).length;
               return (
               <div
                 key={`${b.ballNumber}-${b.subBallNumber ?? 0}-${idx}`}
@@ -597,7 +608,7 @@ export default function MatchPage() {
                 className={`relative flex aspect-square w-[calc(25%-8px)] sm:w-[calc(16.66%-12px)] md:w-20 lg:w-24 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-600 bg-gray-900/40 text-gray-600 text-center transition duration-300 overflow-hidden`}
               >
                 <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-tighter opacity-40 mb-0.5">
-                  Ball {legalCount + idx + 1}
+                  Ball {feedLegalBalls + idx + 1}
                 </span>
                 <span className="text-gray-600 opacity-30 text-lg">—</span>
               </div>
