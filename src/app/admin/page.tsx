@@ -6,6 +6,54 @@ import { API_BASE } from '../../lib/api';
 
 const BALL_OUTCOME_ORDER = ['Dot', '1-2 Runs', '4 Runs', '6 Runs', 'Wicket', 'Extras'];
 
+function PpImageEditorRow({
+  marketId,
+  initialUrl,
+  headers,
+  onSaved,
+  showToast,
+}: {
+  marketId: string;
+  initialUrl: string;
+  headers: Record<string, string>;
+  onSaved: (rows: unknown[]) => void;
+  showToast: (msg: string, type?: string) => void;
+}) {
+  const [draft, setDraft] = useState(initialUrl);
+  useEffect(() => {
+    setDraft(initialUrl);
+  }, [initialUrl, marketId]);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="https://…"
+        className="w-full text-[11px] bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-200"
+      />
+      <button
+        type="button"
+        className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 text-left"
+        onClick={async () => {
+          const res = await fetch(`${API_BASE}/admin/player-props/markets/${marketId}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({
+              playerImageUrl: draft.trim() ? draft.trim() : null,
+            }),
+          });
+          const d = await res.json().catch(() => ({}));
+          if (res.ok) onSaved(d as unknown[]);
+          else showToast((d as { message?: string })?.message || 'Image update failed', 'error');
+        }}
+      >
+        Save image
+      </button>
+    </div>
+  );
+}
+
 function sortBallOutcomes<T extends { predictionValue: string }>(rows: T[]): T[] {
   const order = new Map(BALL_OUTCOME_ORDER.map((k, i) => [k, i]));
   return [...rows].sort((a, b) => {
@@ -131,6 +179,7 @@ export default function AdminPage() {
       multiplier: number;
       isPublished: boolean;
       status: string;
+      playerImageUrl?: string | null;
     }>
   >([]);
   const [ppForm, setPpForm] = useState({
@@ -140,6 +189,7 @@ export default function AdminPage() {
     threshold: '50',
     multiplier: '5',
     isPublished: false,
+    playerImageUrl: '',
   });
   const [ppManual, setPpManual] = useState({
     teamName: '',
@@ -1854,7 +1904,7 @@ export default function AdminPage() {
                     value={ppForm.multiplier}
                     onChange={(e) => setPpForm((f) => ({ ...f, multiplier: e.target.value }))}
                   />
-                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <label className="flex items-center gap-2 text-sm text-gray-300 sm:col-span-2">
                     <input
                       type="checkbox"
                       checked={ppForm.isPublished}
@@ -1862,23 +1912,33 @@ export default function AdminPage() {
                     />
                     Published (visible to users)
                   </label>
+                  <input
+                    placeholder="Player image URL (https, optional)"
+                    className="sm:col-span-2 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={ppForm.playerImageUrl}
+                    onChange={(e) => setPpForm((f) => ({ ...f, playerImageUrl: e.target.value }))}
+                  />
                 </div>
                 <button
                   type="button"
                   disabled={!!actionLoading}
                   onClick={async () => {
                     setActionLoading('ppMarket');
+                    const payload: Record<string, unknown> = {
+                      teamName: ppForm.teamName.trim(),
+                      playerName: ppForm.playerName.trim(),
+                      statType: ppForm.statType,
+                      threshold: Number(ppForm.threshold),
+                      multiplier: Number(ppForm.multiplier),
+                      isPublished: ppForm.isPublished,
+                    };
+                    if (ppForm.playerImageUrl.trim()) {
+                      payload.playerImageUrl = ppForm.playerImageUrl.trim();
+                    }
                     const res = await fetch(`${API_BASE}/admin/player-props/match/${ppMatchId}/markets`, {
                       method: 'POST',
                       headers,
-                      body: JSON.stringify({
-                        teamName: ppForm.teamName.trim(),
-                        playerName: ppForm.playerName.trim(),
-                        statType: ppForm.statType,
-                        threshold: Number(ppForm.threshold),
-                        multiplier: Number(ppForm.multiplier),
-                        isPublished: ppForm.isPublished,
-                      }),
+                      body: JSON.stringify(payload),
                     });
                     const d = await res.json().catch(() => ({}));
                     setActionLoading(null);
@@ -1897,9 +1957,10 @@ export default function AdminPage() {
             {ppMatchId && ppMarkets.length > 0 && (
               <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 overflow-x-auto">
                 <h3 className="font-bold text-lg mb-4">Markets</h3>
-                <table className="w-full text-sm">
+                <table className="w-full text-sm min-w-[640px]">
                   <thead>
                     <tr className="text-left text-gray-500 border-b border-gray-700">
+                      <th className="pb-2 pr-2">Photo</th>
                       <th className="pb-2 pr-2">Player</th>
                       <th className="pb-2 pr-2">Stat</th>
                       <th className="pb-2 pr-2">×</th>
@@ -1909,7 +1970,42 @@ export default function AdminPage() {
                   </thead>
                   <tbody>
                     {ppMarkets.map((m) => (
-                      <tr key={m.id} className="border-b border-gray-800/80">
+                      <tr key={m.id} className="border-b border-gray-800/80 align-top">
+                        <td className="py-2 pr-2 w-36">
+                          <div className="flex flex-col gap-2">
+                            <div className="w-14 h-14 rounded-lg bg-gray-900 border border-gray-700 overflow-hidden flex items-center justify-center shrink-0">
+                              {m.playerImageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={m.playerImageUrl}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-gray-600 text-xs">—</span>
+                              )}
+                            </div>
+                            <PpImageEditorRow
+                              marketId={m.id}
+                              initialUrl={m.playerImageUrl ?? ''}
+                              headers={headers}
+                              onSaved={(rows) =>
+                                setPpMarkets(rows as Array<{
+                                  id: string;
+                                  teamName: string;
+                                  playerName: string;
+                                  statType: string;
+                                  threshold: number;
+                                  multiplier: number;
+                                  isPublished: boolean;
+                                  status: string;
+                                  playerImageUrl?: string | null;
+                                }>)
+                              }
+                              showToast={showToast}
+                            />
+                          </div>
+                        </td>
                         <td className="py-2 pr-2">
                           <div className="font-medium text-white">{m.playerName}</div>
                           <div className="text-xs text-gray-500">{m.teamName}</div>

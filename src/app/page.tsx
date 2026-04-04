@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useStore } from '../store/store';
+import BetOnFavourites from '../components/BetOnFavourites';
 
 export default function Home() {
   const siteBranding = useStore((s) => s.siteBranding);
@@ -18,7 +19,8 @@ export default function Home() {
         <div className="absolute w-96 h-96 bg-emerald-600 rounded-full mix-blend-multiply filter blur-[128px] opacity-30 bottom-10 right-10"></div>
       </div>
       
-      <main className="relative z-10 flex flex-col items-center justify-center min-h-screen p-6 md:p-24 text-center">
+      <main className="relative z-10 flex flex-col items-center min-h-screen p-6 md:p-16 text-center">
+        <div className="flex flex-col items-center justify-center flex-1 py-12 md:py-20">
         <div className="inline-block mb-4 px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 backdrop-blur-md">
           <span className="text-indigo-400 font-semibold text-sm tracking-widest uppercase">The Next Gen of Fantasy Cricket</span>
         </div>
@@ -45,8 +47,11 @@ export default function Home() {
             Create Free Account
           </Link>
         </div>
+        </div>
+
+        <BetOnFavourites />
         
-        <div className="mt-24 grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl">
+        <div className="w-full max-w-5xl pb-16 grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="p-8 rounded-3xl bg-gray-800/40 border border-gray-700/50 backdrop-blur-sm">
             <div className="text-4xl mb-4">🎯</div>
             <h3 className="text-xl font-bold text-white mb-2">Live Ball-by-Ball</h3>
