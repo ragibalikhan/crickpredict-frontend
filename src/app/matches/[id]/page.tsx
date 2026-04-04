@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSocket, type MatchBetActivity } from '../../../hooks/useSocket';
 import { useBallBettingWindow } from '../../../hooks/useBallBettingWindow';
-import { useOverBettingCountdown } from '../../../hooks/useOverBettingCountdown';
 import { useStore, type BallSlot } from '../../../store/store';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -142,7 +141,7 @@ export default function MatchPage() {
   }, [matchId]);
 
   const placePrediction = async (type: string, value: string) => {
-    if (!token) return alert('Please login first to use real coins!');
+    if (!token) return alert('Please log in to place a bet.');
 
     const stake = clampStakeAmount(Number(stakeInput) || 0);
     setStakeInput(String(stake));
@@ -180,7 +179,9 @@ export default function MatchPage() {
         alert(data?.message || 'Failed to place prediction. Check your coins or if predictions are locked.');
       }
     } catch {
-       alert('Failed to connect to backend, predicting locally in demo mode.');
+      alert(
+        'Could not reach the server. Check your connection and that the API is running, then try again.',
+      );
     }
   }
 
@@ -250,8 +251,6 @@ export default function MatchPage() {
     return 'border-emerald-500/50 bg-emerald-950/40 text-emerald-200';
   };
 
-  const overPhaseKey = String(displayMatch?.currentOver ?? 0);
-
   const ballBet = useBallBettingWindow(
     displayMatch?.currentInnings ?? 1,
     displayMatch?.currentOver ?? 0,
@@ -260,20 +259,17 @@ export default function MatchPage() {
     matchLoad === 'ok' && displayMatch?.status === 'live',
     matchId,
   );
-  const overTimer = useOverBettingCountdown(overPhaseKey);
-
   const ballMultiplierMap = useMemo(
     () => ({ ...DEFAULT_BALL_MULTIPLIERS, ...gameMultipliers?.ballMultipliers }),
     [gameMultipliers],
   );
-  const nonBallRange = gameMultipliers?.nonBallMultiplierRange ?? { min: 1.5, max: 5.0 };
-  const nonBallRangeLabel = `${nonBallRange.min}×–${nonBallRange.max}×`;
-
-  const isOverTab = activeTab === 'over';
+  const isComingSoonTab = activeTab === 'over' || activeTab === 'batsman';
   const matchIsLive = displayMatch?.status === 'live';
-  const canPlaceBet = isOverTab
-    ? overTimer.bettingOpen && !displayMatch?.predictionsLocked && matchIsLive
-    : ballBet.bettingOpen && !displayMatch?.predictionsLocked && matchIsLive;
+  const canPlaceBet =
+    activeTab === 'ball' &&
+    ballBet.bettingOpen &&
+    !displayMatch?.predictionsLocked &&
+    matchIsLive;
 
   const placePredictionGuarded = async (type: string, value: string) => {
     if (!canPlaceBet) {
@@ -289,17 +285,13 @@ export default function MatchPage() {
         alert('Predictions are locked for this ball.');
         return;
       }
-      if (isOverTab) {
-        alert(
-          overTimer.phase === 'over'
-            ? 'Betting is closed while this over is in progress. It reopens before the next over starts.'
-            : 'Betting window for the next over is closed — wait for the next cycle.',
-        );
-      } else {
-        alert(
-          'Betting is closed until the next delivery is recorded (legal ball or extra). You will get 15 seconds when that happens.',
-        );
+      if (isComingSoonTab) {
+        alert('Over and Batsman markets are coming soon.');
+        return;
       }
+      alert(
+        'Betting is closed until the next delivery is recorded (legal ball or extra). You will get 15 seconds when that happens.',
+      );
       return;
     }
     await placePrediction(type, value);
@@ -671,22 +663,30 @@ export default function MatchPage() {
           
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end mb-3 sm:mb-4">
              <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                 <button type="button" onClick={() => setActiveTab('ball')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg ${activeTab === 'ball' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>Ball</button>
-                 <button type="button" onClick={() => setActiveTab('over')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg ${activeTab === 'over' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>Over</button>
-                 <button type="button" onClick={() => setActiveTab('batsman')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg ${activeTab === 'batsman' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>Batsman</button>
+                 <button type="button" onClick={() => setActiveTab('ball')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg inline-flex items-center justify-center gap-1.5 ${activeTab === 'ball' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>
+                   Ball
+                 </button>
+                 <button type="button" onClick={() => setActiveTab('over')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg inline-flex items-center justify-center gap-1.5 ${activeTab === 'over' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>
+                   Over
+                   <span className="text-[10px] font-black uppercase tracking-wide bg-white/15 px-1.5 py-0.5 rounded">Soon</span>
+                 </button>
+                 <button type="button" onClick={() => setActiveTab('batsman')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg inline-flex items-center justify-center gap-1.5 ${activeTab === 'batsman' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>
+                   Batsman
+                   <span className="text-[10px] font-black uppercase tracking-wide bg-white/15 px-1.5 py-0.5 rounded">Soon</span>
+                 </button>
              </div>
-             <span className="hidden md:inline-block text-sm font-medium text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full border border-emerald-400/20">
-               Over / batsman {nonBallRangeLabel}
+             <span className="hidden md:inline-block text-sm font-medium text-indigo-300/90 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
+               Ball outcomes use the multipliers on each button
              </span>
           </div>
-          <p className="md:hidden mb-3 text-center text-[11px] text-emerald-400/90">
-            Over &amp; batsman bets use <span className="font-mono font-bold">{nonBallRangeLabel}</span> (set at place)
+          <p className="md:hidden mb-3 text-center text-[11px] text-indigo-300/80">
+            Multipliers are shown on each ball outcome below.
           </p>
 
-          {!displayMatch?.predictionsLocked && (
+          {!displayMatch?.predictionsLocked && activeTab === 'ball' && (
             <div
               className={`mb-6 rounded-2xl border p-4 md:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
-                (isOverTab ? overTimer.bettingOpen : ballBet.bettingOpen)
+                ballBet.bettingOpen
                   ? 'bg-emerald-950/40 border-emerald-500/30'
                   : 'bg-amber-950/40 border-amber-500/35'
               }`}
@@ -694,51 +694,28 @@ export default function MatchPage() {
               <div className="flex items-center gap-3">
                 <div
                   className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl font-mono text-2xl font-black ${
-                    (isOverTab ? overTimer.bettingOpen : ballBet.bettingOpen)
+                    ballBet.bettingOpen
                       ? 'bg-emerald-500/20 text-emerald-300'
                       : 'bg-amber-500/20 text-amber-200'
                   }`}
                 >
-                  {isOverTab
-                    ? String(overTimer.secondsLeft).padStart(2, '0')
-                    : ballBet.bettingOpen
-                      ? String(ballBet.secondsLeftInWindow).padStart(2, '0')
-                      : '—'}
+                  {ballBet.bettingOpen
+                    ? String(ballBet.secondsLeftInWindow).padStart(2, '0')
+                    : '—'}
                 </div>
                 <div>
-                  {isOverTab ? (
-                    <>
-                      <p
-                        className={`text-lg font-black ${
-                          overTimer.bettingOpen ? 'text-emerald-300' : 'text-amber-200'
-                        }`}
-                      >
-                        {overTimer.phase === 'betting'
-                          ? 'Place your bet (next over)'
-                          : 'Over in progress'}
-                      </p>
-                      <p className="text-sm text-gray-400">
-                        {overTimer.phase === 'betting'
-                          ? `Betting closes when the over starts · ${overTimer.secondsLeft}s left in this window`
-                          : `Betting stays closed until this over completes · ${overTimer.secondsLeft}s until the next over window`}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p
-                        className={`text-lg font-black ${
-                          ballBet.bettingOpen ? 'text-emerald-300' : 'text-amber-200'
-                        }`}
-                      >
-                        {ballBet.bettingOpen ? 'Place your bet' : 'Session closed — wait for next event'}
-                      </p>
-                      <p className="text-sm text-gray-400">
-                        {ballBet.bettingOpen
-                          ? `You have ${ballBet.secondsLeftInWindow}s left — betting closes when this window ends.`
-                          : 'A new 15s window opens after each legal ball or after an extra (wide/no-ball) is recorded — even if the over counter does not move.'}
-                      </p>
-                    </>
-                  )}
+                  <p
+                    className={`text-lg font-black ${
+                      ballBet.bettingOpen ? 'text-emerald-300' : 'text-amber-200'
+                    }`}
+                  >
+                    {ballBet.bettingOpen ? 'Place your bet' : 'Session closed — wait for next event'}
+                  </p>
+                  <p className="text-sm text-gray-400">
+                    {ballBet.bettingOpen
+                      ? `You have ${ballBet.secondsLeftInWindow}s left — betting closes when this window ends.`
+                      : 'A new 15s window opens after each legal ball or after an extra (wide/no-ball) is recorded — even if the over counter does not move.'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -821,55 +798,22 @@ export default function MatchPage() {
               )}
 
               {activeTab === 'over' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-4">
-                  {(
-                    [
-                      { label: 'Over 10.5 Runs', val: 'Over_10.5', color: 'bg-indigo-600 hover:brightness-110' },
-                      { label: 'Under 10.5 Runs', val: 'Under_10.5', color: 'bg-cyan-600 hover:brightness-110' },
-                      { label: 'Wicket in Over', val: 'Over_Wicket_Yes', color: 'bg-red-600 hover:brightness-110' },
-                      { label: 'Maiden Over', val: 'Over_Maiden', color: 'bg-gray-600 hover:brightness-110' },
-                    ] as const
-                  ).map((outcome) => (
-                    <button
-                      key={outcome.val}
-                      type="button"
-                      onClick={() => placePredictionGuarded('over', outcome.val)}
-                      disabled={!canPlaceBet}
-                      className={`${outcome.color} text-white min-h-[4.75rem] sm:min-h-[5.5rem] py-3 px-3 sm:py-6 rounded-xl sm:rounded-2xl font-black text-base sm:text-xl transition-all border border-white/10 flex flex-col items-center justify-center gap-1 disabled:pointer-events-none disabled:opacity-40 active:scale-[0.98]`}
-                    >
-                      <span className="text-center leading-tight">{outcome.label}</span>
-                      <span className="inline-flex items-center rounded-full bg-black/25 px-2.5 py-0.5 text-amber-200 font-mono text-xs sm:text-sm font-black tabular-nums ring-1 ring-amber-400/30">
-                        {nonBallRangeLabel}
-                      </span>
-                      <span className="text-[10px] text-white/70 font-medium">Random at place</span>
-                    </button>
-                  ))}
+                <div className="rounded-2xl border border-indigo-500/25 bg-indigo-950/30 px-6 py-14 text-center">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-300/80 mb-2">Over markets</p>
+                  <p className="text-2xl sm:text-3xl font-black text-white mb-2">Coming soon</p>
+                  <p className="text-sm text-gray-400 max-w-md mx-auto">
+                    Totals, maidens, and wicket-in-over props will launch here after settlement logic is wired to live overs.
+                  </p>
                 </div>
               )}
 
               {activeTab === 'batsman' && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
-                  {(
-                    [
-                      { label: 'Hit Six Next 5 Balls', val: 'Batsman_Six' },
-                      { label: 'Get Out Next 5 Balls', val: 'Batsman_Out' },
-                      { label: 'Score 10+ Next 5 Balls', val: 'Batsman_10+' },
-                    ] as const
-                  ).map((outcome) => (
-                    <button
-                      key={outcome.val}
-                      type="button"
-                      onClick={() => placePredictionGuarded('batsman', outcome.val)}
-                      disabled={!canPlaceBet}
-                      className="bg-emerald-600 text-white hover:bg-emerald-500 min-h-[4.75rem] sm:min-h-[5.5rem] py-3 px-3 sm:py-6 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg transition-all border border-white/10 flex flex-col items-center justify-center gap-1 disabled:pointer-events-none disabled:opacity-40 active:scale-[0.98]"
-                    >
-                      <span className="text-center leading-snug">{outcome.label}</span>
-                      <span className="inline-flex items-center rounded-full bg-black/25 px-2.5 py-0.5 text-amber-200 font-mono text-xs sm:text-sm font-black tabular-nums ring-1 ring-amber-400/30">
-                        {nonBallRangeLabel}
-                      </span>
-                      <span className="text-[10px] text-emerald-100/80 font-medium">Random at place</span>
-                    </button>
-                  ))}
+                <div className="rounded-2xl border border-emerald-500/25 bg-emerald-950/20 px-6 py-14 text-center">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-300/80 mb-2">Batsman markets</p>
+                  <p className="text-2xl sm:text-3xl font-black text-white mb-2">Coming soon</p>
+                  <p className="text-sm text-gray-400 max-w-md mx-auto">
+                    Next-ball streaks and batsman milestones will be available in a future update.
+                  </p>
                 </div>
               )}
 
