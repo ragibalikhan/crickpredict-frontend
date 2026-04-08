@@ -2,13 +2,21 @@
 
 import Link from 'next/link';
 import { useStore } from '../store/store';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function Home() {
   const siteBranding = useStore((s) => s.siteBranding);
+  const token = useStore((s) => s.token);
+  const router = useRouter();
   const siteName = siteBranding?.siteName ?? 'CrickPredict';
   const siteDescription =
     siteBranding?.siteDescription ??
     'Predict live IPL balls, overs, and batsman performance in real-time. Use your skill to accumulate coins and climb the global leaderboards.';
+
+  useEffect(() => {
+    if (token) router.replace('/dashboard');
+  }, [token, router]);
 
   return (
     <div className="relative min-h-screen bg-gray-900 overflow-hidden">

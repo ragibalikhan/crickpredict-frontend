@@ -25,7 +25,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-gray-900 text-white min-h-screen pt-16 selection:bg-indigo-500/30">
+      <body className="bg-gray-900 text-white min-h-screen selection:bg-indigo-500/30">
         <SiteBrandingLoader />
         <Navbar />
         <ToastProvider />

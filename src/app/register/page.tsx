@@ -15,6 +15,7 @@ function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const setUser = useStore((state) => state.setUser);
+  const token = useStore((state) => state.token);
   const siteBranding = useStore((s) => s.siteBranding);
   const siteName = siteBranding?.siteName ?? 'CrickPredict';
   const logoSrc = siteBranding?.logoUrl ? `${API_BASE}${siteBranding.logoUrl}` : null;
@@ -24,6 +25,10 @@ function RegisterForm() {
     const ref = searchParams.get('ref');
     if (ref) setReferralCode(ref.toUpperCase());
   }, [searchParams]);
+
+  useEffect(() => {
+    if (token) router.replace('/dashboard');
+  }, [token, router]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../../store/store';
 import Link from 'next/link';
@@ -12,9 +12,14 @@ export default function Login() {
   const [error, setError] = useState('');
   const router = useRouter();
   const setUser = useStore((state) => state.setUser);
+  const token = useStore((state) => state.token);
   const siteBranding = useStore((s) => s.siteBranding);
   const siteName = siteBranding?.siteName ?? 'CrickPredict';
   const logoSrc = siteBranding?.logoUrl ? `${API_BASE}${siteBranding.logoUrl}` : null;
+
+  useEffect(() => {
+    if (token) router.replace('/dashboard');
+  }, [token, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
