@@ -89,7 +89,7 @@ function RegisterForm() {
 
         <form onSubmit={handleRegister} className="bg-gray-800/80 backdrop-blur-md p-8 rounded-3xl shadow-2xl border border-gray-700/50">
           <h2 className="text-2xl font-black mb-2 text-white">Get Started 🚀</h2>
-          <p className="text-gray-400 text-sm mb-6">Start with 1,000 free coins on signup!</p>
+          <p className="text-gray-400 text-sm mb-6">Create your account and start playing.</p>
 
           {referralCode && (
             <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm flex items-center gap-2">

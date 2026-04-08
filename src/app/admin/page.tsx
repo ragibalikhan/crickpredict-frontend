@@ -133,6 +133,7 @@ export default function AdminPage() {
   });
   const [bonusSettings, setBonusSettings] = useState({
     signupBonusAmount: 50,
+    signupInitialCoins: 0,
     signupBonusMinDepositRequired: 100,
     signupBonusWageringMultiplier: 1,
     referralBonusAmount: 50,
@@ -245,6 +246,7 @@ export default function AdminPage() {
     setBonusSettings(d);
     setBonusDraft({
       signupBonusAmount: d.signupBonusAmount,
+      signupInitialCoins: d.signupInitialCoins ?? 0,
       signupBonusMinDepositRequired: d.signupBonusMinDepositRequired,
       signupBonusWageringMultiplier: d.signupBonusWageringMultiplier,
       referralBonusAmount: d.referralBonusAmount,
@@ -1651,6 +1653,17 @@ export default function AdminPage() {
                     onChange={(e) => setBonusDraft((d) => ({ ...d, signupBonusAmount: Number(e.target.value) }))}
                   />
                   <p className="text-[10px] text-gray-500 mt-1">Amount given to new users (starts as LOCKED).</p>
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-500 uppercase font-bold tracking-wider">Signup Starting Coins 🆕</label>
+                  <input
+                    type="number"
+                    className="block mt-1.5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 w-full text-white"
+                    value={bonusDraft.signupInitialCoins}
+                    onChange={(e) => setBonusDraft((d) => ({ ...d, signupInitialCoins: Number(e.target.value) }))}
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">Base wallet balance for every newly created account.</p>
                 </div>
 
                 <div>
