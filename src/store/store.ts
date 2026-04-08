@@ -137,7 +137,10 @@ export const useStore = create<AppState>()(
         }),
       setLiveMatch: (match) => 
         set((state) => {
-          if (!state.liveMatch || isNewerMatch(state.liveMatch, match)) {
+          const incomingId = String(match?._id ?? '');
+          const currentId = String(state.liveMatch?._id ?? '');
+          const switchingMatch = incomingId.length > 0 && currentId.length > 0 && incomingId !== currentId;
+          if (switchingMatch || !state.liveMatch || isNewerMatch(state.liveMatch, match)) {
             return {
               liveMatch: {
                 ...match,
@@ -155,6 +158,12 @@ export const useStore = create<AppState>()(
       setPredictionsLocked: (locked) => set((state) => ({ liveMatch: state.liveMatch ? { ...state.liveMatch, predictionsLocked: locked } : null })),
       updateBall: (matchData) => 
         set((state) => {
+          const incomingId = String(matchData?._id ?? '');
+          const currentId = String(state.liveMatch?._id ?? '');
+          // Ignore socket updates from other matches.
+          if (state.liveMatch && incomingId && currentId && incomingId !== currentId) {
+            return state;
+          }
           if (!state.liveMatch || isNewerMatch(state.liveMatch, matchData)) {
             return {
               liveMatch: {
