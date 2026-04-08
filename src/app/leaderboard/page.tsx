@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useStore } from '../../store/store';
-import { API_BASE } from '../../lib/api';
+import { apiJson } from '../../lib/api';
 
 type LeaderRow = {
   _id: string;
@@ -16,11 +16,10 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_BASE}/users/leaderboard`, {
+    apiJson<LeaderRow[]>(`/users/leaderboard`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((res) => res.json())
-      .then((data: LeaderRow[]) => {
+      .then((data) => {
         setLeaders(Array.isArray(data) ? data : []);
         setLoading(false);
       })

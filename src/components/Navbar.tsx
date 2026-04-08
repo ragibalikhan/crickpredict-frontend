@@ -56,8 +56,21 @@ export default function Navbar() {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleOpenNotifs = () => {
-    setShowNotifs(s => !s);
-    if (!showNotifs && unreadCount > 0) markAllRead();
+    setShowNotifs((s) => !s);
+    if (!showNotifs && unreadCount > 0) {
+      markAllRead();
+      const unread = notifications.filter((n) => !n.read && n?._id).slice(0, 20);
+      if (token && unread.length > 0) {
+        Promise.all(
+          unread.map((n) =>
+            fetch(`${API_BASE}/notifications/${n._id}/read`, {
+              method: 'PATCH',
+              headers: { Authorization: `Bearer ${token}` },
+            }).catch(() => null),
+          ),
+        ).catch(() => null);
+      }
+    }
   };
 
   const notifIcon = (type: string) => ({ info: '💬', success: '✅', warning: '⚠️', error: '🚨' }[type] || '🔔');

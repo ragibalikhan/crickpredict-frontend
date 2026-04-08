@@ -138,7 +138,15 @@ export const useStore = create<AppState>()(
       setLiveMatch: (match) => 
         set((state) => {
           if (!state.liveMatch || isNewerMatch(state.liveMatch, match)) {
-            return { liveMatch: { ...match, predictionsLocked: false } };
+            return {
+              liveMatch: {
+                ...match,
+                predictionsLocked:
+                  typeof match?.predictionsLocked === 'boolean'
+                    ? match.predictionsLocked
+                    : (state.liveMatch?.predictionsLocked ?? false),
+              },
+            };
           }
           return state;
         }),
@@ -148,7 +156,15 @@ export const useStore = create<AppState>()(
       updateBall: (matchData) => 
         set((state) => {
           if (!state.liveMatch || isNewerMatch(state.liveMatch, matchData)) {
-            return { liveMatch: { ...matchData, predictionsLocked: false } };
+            return {
+              liveMatch: {
+                ...matchData,
+                predictionsLocked:
+                  typeof matchData?.predictionsLocked === 'boolean'
+                    ? matchData.predictionsLocked
+                    : (state.liveMatch?.predictionsLocked ?? false),
+              },
+            };
           }
           return state;
         }),

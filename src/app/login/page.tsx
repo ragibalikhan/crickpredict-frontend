@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../../store/store';
 import Link from 'next/link';
-import { API_BASE } from '../../lib/api';
+import { API_BASE, ApiError, apiJson } from '../../lib/api';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -22,21 +22,19 @@ export default function Login() {
     if (!username || !password) { setError('Please fill in all fields'); return; }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const data = await apiJson<{ user: any; access_token: string }>(`/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password }),
       });
-
-      const data = await res.json();
-      if (res.ok) {
-        setUser(data.user, data.access_token);
-        router.push('/dashboard');
+      setUser(data.user, data.access_token);
+      router.push('/dashboard');
+    } catch (err) {
+      if (err instanceof ApiError && err.status < 500) {
+        setError(err.message || 'Invalid username or password');
       } else {
-        setError(data.message || 'Invalid username or password');
+        setError('Cannot connect to server. Check backend is running.');
       }
-    } catch {
-      setError('Cannot connect to server. Check backend is running.');
     }
     setLoading(false);
   };

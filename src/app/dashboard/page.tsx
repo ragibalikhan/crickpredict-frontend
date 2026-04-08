@@ -26,9 +26,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!token) return;
-    const load = () =>
+    let controller: AbortController | null = null;
+    const load = () => {
+      controller?.abort();
+      controller = new AbortController();
       fetch(`${API_BASE}/matches`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       })
         .then((res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -39,14 +43,19 @@ export default function Dashboard() {
           setMatches(list);
           setLoadError(null);
         })
-        .catch(() => {
+        .catch((err) => {
+          if (err?.name === 'AbortError') return;
           setLoadError(
             'Cannot reach the API. Start the backend (Nest on port 3000) and refresh, or set NEXT_PUBLIC_API_URL.',
           );
         });
+    };
     load();
     const t = setInterval(load, 2000);
-    return () => clearInterval(t);
+    return () => {
+      clearInterval(t);
+      controller?.abort();
+    };
   }, [token]);
 
   useEffect(() => {
@@ -118,10 +127,16 @@ export default function Dashboard() {
                       className={
                         match.status === 'live'
                           ? 'bg-red-500/10 text-red-400 px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-red-500/20 shrink-0'
-                          : 'bg-slate-500/10 text-slate-300 px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-slate-500/20 shrink-0'
+                          : match.status === 'completed'
+                            ? 'bg-emerald-500/10 text-emerald-400 px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-emerald-500/20 shrink-0'
+                            : 'bg-slate-500/10 text-slate-300 px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider border border-slate-500/20 shrink-0'
                       }
                     >
-                      {match.status === 'live' ? 'Live' : 'Upcoming'}
+                      {match.status === 'live'
+                        ? 'Live'
+                        : match.status === 'completed'
+                          ? 'Finished'
+                          : 'Upcoming'}
                     </span>
                     <span className="text-gray-400 text-xs sm:text-sm truncate">
                       Over {match.currentOver}.{match.currentBall}

@@ -77,15 +77,16 @@ export default function MatchPage() {
 
   useEffect(() => {
     if (!matchId) return;
-    let cancelled = false;
-    const load = () =>
-      fetch(`${API_BASE}/matches/${matchId}`)
+    let controller: AbortController | null = null;
+    const load = () => {
+      controller?.abort();
+      controller = new AbortController();
+      fetch(`${API_BASE}/matches/${matchId}`, { signal: controller.signal })
         .then((res) => {
           if (!res.ok) throw new Error('not_found');
           return res.json();
         })
         .then((data) => {
-          if (cancelled) return;
           if (!data) {
             setMatchLoad('error');
             return;
@@ -93,15 +94,17 @@ export default function MatchPage() {
           setLiveMatch(data);
           setMatchLoad('ok');
         })
-        .catch(() => {
-          if (!cancelled) setMatchLoad('error');
+        .catch((err) => {
+          if (err?.name === 'AbortError') return;
+          setMatchLoad('error');
         });
+    };
     setMatchLoad('loading');
     load();
     const poll = setInterval(load, MATCH_POLL_MS);
     return () => {
-      cancelled = true;
       clearInterval(poll);
+      controller?.abort();
     };
   }, [matchId, setLiveMatch]);
 

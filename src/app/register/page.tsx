@@ -3,7 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useStore } from '../../store/store';
 import Link from 'next/link';
-import { API_BASE } from '../../lib/api';
+import { API_BASE, ApiError, apiJson } from '../../lib/api';
 
 function RegisterForm() {
   const [username, setUsername] = useState('');
@@ -35,25 +35,23 @@ function RegisterForm() {
       const body: Record<string, string> = { username, email, password };
       if (referralCode.trim()) body.referralCode = referralCode.trim().toUpperCase();
 
-      const res = await fetch(`${API_BASE}/auth/register`, {
+      const data = await apiJson<{ user: any; access_token: string }>(`/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       });
-
-      const data = await res.json();
-      if (res.ok) {
-        setUser(data.user, data.access_token);
-        // Flag signup bonus toast for dashboard
-        if (data.user.signupBonusStatus === 'locked') {
-          sessionStorage.setItem('signup_bonus_toast', '1');
-        }
-        router.push('/dashboard');
-      } else {
-        setError(data.message || 'Registration failed. Username or email may already exist.');
+      setUser(data.user, data.access_token);
+      // Flag signup bonus toast for dashboard
+      if (data.user.signupBonusStatus === 'locked') {
+        sessionStorage.setItem('signup_bonus_toast', '1');
       }
-    } catch {
-      setError('Cannot connect to server. Check backend is running on port 3000.');
+      router.push('/dashboard');
+    } catch (err) {
+      if (err instanceof ApiError && err.status < 500) {
+        setError(err.message || 'Registration failed. Username or email may already exist.');
+      } else {
+        setError('Cannot connect to server. Check backend is running on port 3000.');
+      }
     }
     setLoading(false);
   };

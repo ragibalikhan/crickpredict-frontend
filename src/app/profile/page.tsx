@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store/store';
 import Link from 'next/link';
-import { API_BASE } from '../../lib/api';
+import { apiJson } from '../../lib/api';
 import TeamAvatar from '../../components/TeamAvatar';
 
 export default function ProfilePage() {
@@ -32,10 +32,9 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!token) return;
-    fetch(`${API_BASE}/users/profile`, {
+    apiJson<any>(`/users/profile`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((res) => res.json())
       .then((data) => {
         setProfileData(data);
         setLoading(false);
@@ -51,14 +50,10 @@ export default function ProfilePage() {
     setBetsLoading(true);
     setBetsError(null);
 
-    fetch(`${API_BASE}/predictions/me`, {
+    apiJson<UserBetRow[]>(`/predictions/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data: UserBetRow[]) => {
+      .then((data) => {
         if (cancelled) return;
         setMyBets(Array.isArray(data) ? data : []);
       })
