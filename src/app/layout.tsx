@@ -9,6 +9,11 @@ import SettlementRecovery from '../components/SettlementRecovery';
 export const metadata: Metadata = {
   title: 'CrickPredict',
   description: 'Real-time IPL skill gaming platform',
+  icons: {
+    icon: '/window.svg',
+    shortcut: '/window.svg',
+    apple: '/window.svg',
+  },
 };
 
 export const viewport: Viewport = {

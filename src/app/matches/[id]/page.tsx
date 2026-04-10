@@ -569,7 +569,7 @@ export default function MatchPage() {
               <span className="inline-block w-3 h-3 rounded bg-red-600 align-middle mr-1" /> W
             </span>
           </div>
-          <div className="flex flex-wrap gap-2 md:gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 md:gap-3">
             {/* 1. Render all recorded deliveries (legal + extras) chronologically */}
             {visibleDeliveries.map((b, idx) => {
               const isExtra = (b.subBallNumber ?? 0) > 0;
@@ -580,7 +580,7 @@ export default function MatchPage() {
               return (
               <div
                 key={`${b.ballNumber}-${b.subBallNumber ?? 0}-${idx}`}
-                className={`relative flex aspect-square w-[calc(25%-8px)] sm:w-[calc(16.66%-12px)] md:w-20 lg:w-24 flex-col items-center justify-center rounded-2xl border-2 text-center transition duration-300 overflow-hidden ${ballSlotClass(b, true)}`}
+                className={`relative flex aspect-square w-full flex-col items-center justify-center rounded-2xl border-2 text-center transition duration-300 overflow-hidden ${ballSlotClass(b, true)}`}
               >
                 <span
                   className="text-[9px] md:text-[10px] font-bold uppercase tracking-tighter text-white/40 mb-0.5"
@@ -610,7 +610,7 @@ export default function MatchPage() {
             {placeholders.map((_, idx) => (
               <div
                 key={`empty-${idx}`}
-                className={`relative flex aspect-square w-[calc(25%-8px)] sm:w-[calc(16.66%-12px)] md:w-20 lg:w-24 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-600 bg-gray-900/40 text-gray-600 text-center transition duration-300 overflow-hidden`}
+                className={`relative flex aspect-square w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-600 bg-gray-900/40 text-gray-600 text-center transition duration-300 overflow-hidden`}
               >
                 <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-tighter opacity-40 mb-0.5">
                   Ball {feedLegalBalls + idx + 1}
