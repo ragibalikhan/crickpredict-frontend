@@ -5,6 +5,7 @@ import SiteBrandingLoader from '../components/SiteBrandingLoader';
 import ToastProvider from '../components/ToastProvider';
 import BetSettlementModal from '../components/BetSettlementModal';
 import SettlementRecovery from '../components/SettlementRecovery';
+import AnalyticsTracker from '../components/AnalyticsTracker';
 
 export const metadata: Metadata = {
   title: 'CrickPredict',
@@ -36,6 +37,7 @@ export default function RootLayout({
         <ToastProvider />
         <BetSettlementModal />
         <SettlementRecovery />
+        <AnalyticsTracker />
         {children}
       </body>
     </html>

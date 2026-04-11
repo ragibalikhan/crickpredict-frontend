@@ -66,6 +66,7 @@ function sortBallOutcomes<T extends { predictionValue: string }>(rows: T[]): T[]
 
 type Tab =
   | 'overview'
+  | 'analytics'
   | 'users'
   | 'deposits'
   | 'withdrawals'
@@ -131,6 +132,7 @@ export default function AdminPage() {
     Wicket: '5.0',
     Extras: '2.0',
   });
+  const [simCrowdDraft, setSimCrowdDraft] = useState({ enabled: false, winBiasPercent: 80 });
   const [bonusSettings, setBonusSettings] = useState({
     signupBonusAmount: 50,
     signupInitialCoins: 0,
@@ -198,6 +200,37 @@ export default function AdminPage() {
     role: 'batsman' as 'batsman' | 'bowler' | 'keeper_batsman' | 'all_rounder',
   });
 
+  const [onlineWithin, setOnlineWithin] = useState(2);
+  const [onlineRole, setOnlineRole] = useState<'user' | 'admin' | 'all'>('user');
+  const [onlineAnalytics, setOnlineAnalytics] = useState<{
+    withinMinutes: number;
+    roleFilter: string;
+    count: number;
+    users: Array<{ _id: string; username: string; email: string; role: string; lastSeenAt?: string }>;
+  } | null>(null);
+  const [visitFilters, setVisitFilters] = useState({
+    from: '',
+    to: '',
+    path: '',
+    visitorKey: '',
+    userId: '',
+    limit: '100',
+    skip: '0',
+  });
+  const [visitData, setVisitData] = useState<{
+    items: Array<{
+      _id: string;
+      visitorKey: string;
+      path: string;
+      referrer?: string;
+      createdAt?: string;
+      userId?: { _id: string; username: string; email: string } | null;
+    }>;
+    total: number;
+    limit: number;
+    skip: number;
+  } | null>(null);
+
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
   const showToast = (msg: string, type = 'success') => {
@@ -236,6 +269,16 @@ export default function AdminPage() {
       '6 Runs': String(bm['6 Runs'] ?? 4.0),
       Wicket: String(bm.Wicket ?? 5.0),
       Extras: String(bm.Extras ?? 2.0),
+    });
+  }, [token]);
+
+  const fetchSimulatedCrowd = useCallback(async () => {
+    const res = await fetch(`${API_BASE}/admin/settings/simulated-crowd`, { headers });
+    if (!res.ok) return;
+    const d = await res.json();
+    setSimCrowdDraft({
+      enabled: !!d.simulatedCrowdEnabled,
+      winBiasPercent: Math.min(100, Math.max(0, Math.round(Number(d.simulatedCrowdWinBias ?? 0.8) * 100))),
     });
   }, [token]);
 
@@ -297,6 +340,33 @@ export default function AdminPage() {
     setLoading(false);
   }, [token]);
 
+  const fetchOnlineAnalytics = useCallback(async () => {
+    const params = new URLSearchParams();
+    params.set('withinMinutes', String(onlineWithin));
+    params.set('role', onlineRole);
+    const res = await fetch(`${API_BASE}/admin/analytics/online?${params}`, { headers });
+    if (res.ok) setOnlineAnalytics(await res.json());
+  }, [token, onlineWithin, onlineRole]);
+
+  const fetchVisits = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (visitFilters.from.trim()) {
+      const d = new Date(visitFilters.from);
+      if (!Number.isNaN(d.getTime())) params.set('from', d.toISOString());
+    }
+    if (visitFilters.to.trim()) {
+      const d = new Date(visitFilters.to);
+      if (!Number.isNaN(d.getTime())) params.set('to', d.toISOString());
+    }
+    if (visitFilters.path.trim()) params.set('path', visitFilters.path.trim());
+    if (visitFilters.visitorKey.trim()) params.set('visitorKey', visitFilters.visitorKey.trim());
+    if (visitFilters.userId.trim()) params.set('userId', visitFilters.userId.trim());
+    params.set('limit', visitFilters.limit || '100');
+    params.set('skip', visitFilters.skip || '0');
+    const res = await fetch(`${API_BASE}/admin/analytics/visits?${params}`, { headers });
+    if (res.ok) setVisitData(await res.json());
+  }, [token, visitFilters]);
+
   const fetchPpMatches = useCallback(async () => {
     const res = await fetch(`${API_BASE}/matches`);
     if (res.ok) {
@@ -334,7 +404,10 @@ export default function AdminPage() {
     if (activeTab === 'withdrawals') fetchWithdrawals();
     if (activeTab === 'deposits') fetchDeposits();
     if (activeTab === 'accounts') fetchAccounts();
-    if (activeTab === 'multipliers') fetchBallMultipliers();
+    if (activeTab === 'multipliers') {
+      fetchBallMultipliers();
+      fetchSimulatedCrowd();
+    }
     if (activeTab === 'bonus') fetchBonusSettings();
     if (activeTab === 'branding') fetchBrandingSettings();
     if (activeTab === 'playerProps') {
@@ -344,6 +417,10 @@ export default function AdminPage() {
     if (activeTab === 'overview') {
       fetchMatchBetting();
       fetchBetOutcomeStats();
+    }
+    if (activeTab === 'analytics') {
+      fetchOnlineAnalytics();
+      fetchVisits();
     }
   }, [
     activeTab,
@@ -355,11 +432,14 @@ export default function AdminPage() {
     fetchDeposits,
     fetchAccounts,
     fetchBallMultipliers,
+    fetchSimulatedCrowd,
     fetchBonusSettings,
     fetchBrandingSettings,
     fetchPpMatches,
     loadPlayerPropsDetail,
     ppMatchId,
+    fetchOnlineAnalytics,
+    fetchVisits,
   ]);
 
   const saveCoinRate = async () => {
@@ -400,6 +480,30 @@ export default function AdminPage() {
     if (res.ok) {
       showToast('Ball multipliers updated');
       fetchBallMultipliers();
+    } else {
+      const d = await res.json();
+      showToast(d.message || 'Failed', 'error');
+    }
+    setActionLoading(null);
+  };
+
+  const saveSimulatedCrowd = async () => {
+    const pct = Number(simCrowdDraft.winBiasPercent);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      return showToast('Win chance must be 0–100%', 'error');
+    }
+    setActionLoading('simCrowd');
+    const res = await fetch(`${API_BASE}/admin/settings/simulated-crowd`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        simulatedCrowdEnabled: simCrowdDraft.enabled,
+        simulatedCrowdWinBias: pct / 100,
+      }),
+    });
+    if (res.ok) {
+      showToast('Simulated crowd settings saved');
+      fetchSimulatedCrowd();
     } else {
       const d = await res.json();
       showToast(d.message || 'Failed', 'error');
@@ -704,6 +808,7 @@ export default function AdminPage() {
 
   const tabs: { id: Tab; label: string; icon: string; badge?: number }[] = [
     { id: 'overview', label: 'Overview', icon: '📊' },
+    { id: 'analytics', label: 'Analytics', icon: '📡' },
     { id: 'users', label: 'Users', icon: '👥' },
     { id: 'deposits', label: 'INR deposits', icon: '💰', badge: stats?.pendingDeposits },
     { id: 'withdrawals', label: 'Withdrawals', icon: '💸', badge: stats?.pendingWithdrawals },
@@ -1491,7 +1596,10 @@ export default function AdminPage() {
               <h2 className="text-xl font-bold">Ball Multipliers</h2>
               <button
                 type="button"
-                onClick={fetchBallMultipliers}
+                onClick={() => {
+                  fetchBallMultipliers();
+                  fetchSimulatedCrowd();
+                }}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm transition"
               >
                 ↻ Refresh
@@ -1544,6 +1652,43 @@ export default function AdminPage() {
                   {actionLoading === 'ballMultipliers' ? 'Saving...' : 'Save multipliers'}
                 </button>
               </div>
+            </div>
+
+            <div className="bg-gray-800/60 border border-amber-700/30 rounded-2xl p-8 space-y-5">
+              <h3 className="text-lg font-bold text-white">Simulated live crowd (demo)</h3>
+              <p className="text-sm text-gray-400">
+                When enabled, random Indian-style display names place fake ball bets on <strong className="text-gray-300">live</strong>{' '}
+                matches. No coins are debited or credited. Bets appear in &quot;Live bets on this match&quot;. When each ball settles, simulated
+                bets randomly win at the rate below (default 80%). Admin betting stats ignore these rows.
+              </p>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="w-5 h-5 rounded border-gray-600 bg-gray-900"
+                  checked={simCrowdDraft.enabled}
+                  onChange={(e) => setSimCrowdDraft((d) => ({ ...d, enabled: e.target.checked }))}
+                />
+                <span className="font-semibold text-white">Enable simulated crowd</span>
+              </label>
+              <div>
+                <label className="block text-xs text-gray-500 mb-2">Simulated win chance when ball settles (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  className="w-full max-w-xs bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 text-white"
+                  value={simCrowdDraft.winBiasPercent}
+                  onChange={(e) => setSimCrowdDraft((d) => ({ ...d, winBiasPercent: Number(e.target.value) }))}
+                />
+              </div>
+              <button
+                type="button"
+                disabled={actionLoading === 'simCrowd'}
+                onClick={saveSimulatedCrowd}
+                className="px-5 py-3 bg-amber-600 hover:bg-amber-500 rounded-xl font-bold disabled:opacity-50"
+              >
+                {actionLoading === 'simCrowd' ? 'Saving…' : 'Save crowd settings'}
+              </button>
             </div>
           </div>
         )}
@@ -2071,6 +2216,206 @@ export default function AdminPage() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-xl font-bold mb-2">Online users</h2>
+              <p className="text-sm text-gray-400 mb-4">
+                Users are considered online if they sent a presence ping within the window (app open, logged in). Adjust role and time window, then refresh.
+              </p>
+              <div className="flex flex-wrap gap-3 items-end mb-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Within (minutes)</label>
+                  <select
+                    className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={onlineWithin}
+                    onChange={(e) => setOnlineWithin(Number(e.target.value))}
+                  >
+                    {[1, 2, 5, 15, 30].map((n) => (
+                      <option key={n} value={n}>
+                        {n} min
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Role</label>
+                  <select
+                    className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={onlineRole}
+                    onChange={(e) => setOnlineRole(e.target.value as 'user' | 'admin' | 'all')}
+                  >
+                    <option value="user">Users only</option>
+                    <option value="admin">Admins only</option>
+                    <option value="all">All</option>
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchOnlineAnalytics()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-semibold"
+                >
+                  Refresh
+                </button>
+              </div>
+              {onlineAnalytics ? (
+                <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-4 overflow-x-auto">
+                  <p className="text-sm text-gray-400 mb-3">
+                    Showing <span className="text-white font-bold">{onlineAnalytics.count}</span> online (last{' '}
+                    {onlineAnalytics.withinMinutes} min · {onlineAnalytics.roleFilter})
+                  </p>
+                  {onlineAnalytics.users.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No users in this window.</p>
+                  ) : (
+                    <table className="w-full text-sm min-w-[480px]">
+                      <thead>
+                        <tr className="text-gray-400 text-xs uppercase text-left border-b border-gray-700/50">
+                          <th className="pb-2 pr-2">User</th>
+                          <th className="pb-2 pr-2">Email</th>
+                          <th className="pb-2 pr-2">Role</th>
+                          <th className="pb-2">Last seen</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {onlineAnalytics.users.map((u) => (
+                          <tr key={u._id} className="border-t border-gray-700/40">
+                            <td className="py-2 pr-2 font-medium">{u.username}</td>
+                            <td className="py-2 pr-2 text-gray-400">{u.email}</td>
+                            <td className="py-2 pr-2">{u.role}</td>
+                            <td className="py-2 text-gray-300 tabular-nums">
+                              {u.lastSeenAt ? new Date(u.lastSeenAt).toLocaleString() : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm">Loading…</p>
+              )}
+            </div>
+
+            <div>
+              <h2 className="text-xl font-bold mb-2">Site visits</h2>
+              <p className="text-sm text-gray-400 mb-4">
+                Page views from the public tracker (visitor key + path). Logged-in requests attach user when possible.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">From</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={visitFilters.from}
+                    onChange={(e) => setVisitFilters((f) => ({ ...f, from: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">To</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={visitFilters.to}
+                    onChange={(e) => setVisitFilters((f) => ({ ...f, to: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Path prefix</label>
+                  <input
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    placeholder="/dashboard"
+                    value={visitFilters.path}
+                    onChange={(e) => setVisitFilters((f) => ({ ...f, path: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Visitor key</label>
+                  <input
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 font-mono text-xs"
+                    placeholder="v_…"
+                    value={visitFilters.visitorKey}
+                    onChange={(e) => setVisitFilters((f) => ({ ...f, visitorKey: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">User ID</label>
+                  <input
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 font-mono text-xs"
+                    placeholder="Mongo ObjectId"
+                    value={visitFilters.userId}
+                    onChange={(e) => setVisitFilters((f) => ({ ...f, userId: e.target.value }))}
+                  />
+                </div>
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 mb-1">Limit / skip</label>
+                    <div className="flex gap-2">
+                      <input
+                        className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                        value={visitFilters.limit}
+                        onChange={(e) => setVisitFilters((f) => ({ ...f, limit: e.target.value }))}
+                      />
+                      <input
+                        className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                        value={visitFilters.skip}
+                        onChange={(e) => setVisitFilters((f) => ({ ...f, skip: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => fetchVisits()}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-semibold mb-4"
+              >
+                Apply filters
+              </button>
+              {visitData ? (
+                <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-4 overflow-x-auto">
+                  <p className="text-sm text-gray-400 mb-3">
+                    Total <span className="text-white font-bold">{visitData.total}</span> matching · page size {visitData.limit} · skip{' '}
+                    {visitData.skip}
+                  </p>
+                  {visitData.items.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No visits match.</p>
+                  ) : (
+                    <table className="w-full text-sm min-w-[720px]">
+                      <thead>
+                        <tr className="text-gray-400 text-xs uppercase text-left border-b border-gray-700/50">
+                          <th className="pb-2 pr-2">Time</th>
+                          <th className="pb-2 pr-2">Path</th>
+                          <th className="pb-2 pr-2">Visitor</th>
+                          <th className="pb-2">User</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visitData.items.map((row) => (
+                          <tr key={row._id} className="border-t border-gray-700/40">
+                            <td className="py-2 pr-2 text-gray-300 tabular-nums whitespace-nowrap">
+                              {row.createdAt ? new Date(row.createdAt).toLocaleString() : '—'}
+                            </td>
+                            <td className="py-2 pr-2 font-mono text-xs">{row.path}</td>
+                            <td className="py-2 pr-2 font-mono text-[11px] break-all">{row.visitorKey}</td>
+                            <td className="py-2 text-gray-300">
+                              {row.userId && typeof row.userId === 'object' && 'username' in row.userId
+                                ? `${row.userId.username}`
+                                : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm">Loading…</p>
+              )}
+            </div>
           </div>
         )}
 
