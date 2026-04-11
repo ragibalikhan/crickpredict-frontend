@@ -134,7 +134,6 @@ export default function Navbar() {
               <div className="hidden md:flex gap-1">
                 {[
                   { href: '/dashboard', label: '🏏 Matches' },
-                  { href: '/leaderboard', label: '🏆 Leaderboard' },
                   { href: '/wallet', label: '💰 Wallet' },
                   { href: '/refer', label: '🎁 Refer & Earn' },
                   ...(user.role === 'admin' ? [{ href: '/admin', label: '⚙️ Admin' }] : []),
@@ -226,7 +225,6 @@ export default function Navbar() {
                       { href: '/profile', icon: '👤', label: 'My Profile' },
                       { href: '/wallet', icon: '💰', label: 'Wallet & UPI' },
                       { href: '/refer', icon: '🎁', label: 'Refer & Earn' },
-                      { href: '/leaderboard', icon: '🏆', label: 'Leaderboard' },
                       ...(user.role === 'admin' ? [{ href: '/admin', icon: '⚙️', label: 'Admin Panel' }] : []),
                     ].map(item => (
                       <Link key={item.href} href={item.href} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white rounded-xl transition">
@@ -250,7 +248,6 @@ export default function Navbar() {
       <div className="md:hidden fixed bottom-0 left-0 w-full bg-gray-900/95 backdrop-blur-md border-t border-gray-800 flex justify-around items-end pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] z-50">
         {[
           { href: '/dashboard', icon: '🏏', label: 'Matches' },
-          { href: '/leaderboard', icon: '🏆', label: 'Rank' },
           { href: '/wallet', icon: '💰', label: 'Wallet' },
           { href: '/refer', icon: '🎁', label: 'Refer' },
           { href: '/profile', icon: '👤', label: 'Profile' },

@@ -85,12 +85,7 @@ export default function Dashboard() {
           </div>
           
           <div className="bg-gray-800/80 p-4 rounded-2xl border border-gray-700/50 flex gap-4 sm:gap-6 shadow-xl backdrop-blur-sm shadow-indigo-900/20 shrink-0 justify-center md:justify-end">
-             <div className="text-center">
-               <p className="text-sm text-gray-400 font-medium">Rank</p>
-               <p className="text-2xl font-black text-white">#{user?.rank || '--'}</p>
-             </div>
-             <div className="w-px bg-gray-700"></div>
-             <div className="text-center">
+             <div className="text-center min-w-[7rem]">
                <p className="text-sm text-gray-400 font-medium">Win Streak</p>
                <p className="text-2xl font-black text-emerald-400">{user?.currentStreak || 0} 🔥</p>
              </div>

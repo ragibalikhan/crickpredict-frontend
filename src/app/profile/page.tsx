@@ -249,13 +249,8 @@ export default function ProfilePage() {
               </div>
               <h2 className="text-2xl font-black text-white">{profileData?.username}</h2>
               <p className="text-gray-400 text-sm mb-6">{profileData?.email}</p>
-              
-              <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-700/50">
-                 <p className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Global Rank</p>
-                 <p className="text-3xl font-black text-white">#{profileData?.rank || '--'}</p>
-              </div>
 
-              <div className="mt-6">
+              <div className="mt-2">
                 <Link href="/wallet" className="block w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition shadow-lg shadow-indigo-600/20">
                   Manage Wallet
                 </Link>
