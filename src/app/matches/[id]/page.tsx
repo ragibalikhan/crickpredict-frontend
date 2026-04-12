@@ -690,7 +690,7 @@ export default function MatchPage() {
 
           {displayMatch?.status === 'upcoming' && activeTab === 'ball' && (
             <div className="mb-4 rounded-xl border border-sky-500/30 bg-sky-950/30 px-4 py-3 text-sm text-sky-100">
-              Ball-by-ball betting opens when this match goes live. Pre-match <strong>Bet on Favrouties</strong> picks
+              Ball-by-ball betting opens when this match goes live. Pre-match <strong>Bet on Favourites</strong> picks
               are on your <strong>Dashboard</strong>.
             </div>
           )}

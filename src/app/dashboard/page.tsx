@@ -20,6 +20,7 @@ export default function Dashboard() {
       wicketsA: number;
       wicketsB: number;
       status?: string;
+      scheduledStartAt?: string;
     }>
   >([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -107,9 +108,9 @@ export default function Dashboard() {
 
         {matches.length === 0 && !loadError ? (
            <div className="text-center p-12 bg-gray-800/50 rounded-3xl border border-gray-700/50 border-dashed">
-             <p className="text-gray-400 mb-2">No matches synced yet.</p>
-             <p className="text-gray-600 text-sm max-w-md mx-auto">
-               Ensure the backend is running with MongoDB. The IPL poller fills this list from CricAPI or the Cricbuzz scraper (about every 2s).
+             <p className="text-gray-400 mb-2">No IPL matches to show yet.</p>
+             <p className="text-gray-600 text-sm max-w-md mx-auto leading-relaxed">
+               The API must reach MongoDB and the backend must sync fixtures (CricAPI or Cricbuzz scraper every ~2s). In Admin, use &quot;Resync live &amp; upcoming&quot; after deploy. Remove any old test rows named &quot;Demo …&quot; from the database if they were used for QA.
              </p>
            </div>
         ) : matches.length === 0 ? null : (
@@ -134,7 +135,12 @@ export default function Dashboard() {
                           : 'Upcoming'}
                     </span>
                     <span className="text-gray-400 text-xs sm:text-sm truncate">
-                      Over {match.currentOver}.{match.currentBall}
+                      {match.status === 'upcoming' && match.scheduledStartAt
+                        ? `Starts ${new Date(match.scheduledStartAt).toLocaleString(undefined, {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })}`
+                        : `Over ${match.currentOver ?? 0}.${match.currentBall ?? 0}`}
                     </span>
                   </div>
                   <div className="flex items-center justify-center gap-3 sm:gap-5 mb-4 sm:mb-6 min-w-0">

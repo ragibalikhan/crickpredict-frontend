@@ -100,7 +100,7 @@ export default function BetOnFavourites() {
   if (loadState === 'loading') {
     return (
       <section className="w-full mb-10 sm:mb-12">
-        <h2 className="text-2xl md:text-3xl font-black text-white text-center mb-8">Bet on Favrouties</h2>
+        <h2 className="text-2xl md:text-3xl font-black text-white text-center mb-8">Bet on Favourites</h2>
         <div className="flex justify-center py-12">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
         </div>
@@ -111,7 +111,7 @@ export default function BetOnFavourites() {
   if (loadState === 'error') {
     return (
       <section className="w-full mb-10 sm:mb-12 rounded-2xl border border-amber-600/30 bg-amber-950/20 px-4 py-6 text-center text-amber-100 text-sm">
-        Could not load Bet on Favrouties. Check that the API is running.
+        Could not load Bet on Favourites. Check that the API is running.
       </section>
     );
   }
@@ -119,7 +119,7 @@ export default function BetOnFavourites() {
   if (items.length === 0) {
     return (
       <section className="w-full mb-10 sm:mb-12 rounded-2xl border border-gray-700/50 bg-gray-800/30 px-4 py-8">
-        <h2 className="text-xl md:text-2xl font-black text-white text-center mb-2">Bet on Favrouties</h2>
+        <h2 className="text-xl md:text-2xl font-black text-white text-center mb-2">Bet on Favourites</h2>
         <p className="text-center text-sm text-gray-500">
           No pre-match player picks right now — check back after admins publish markets.
         </p>
@@ -136,7 +136,7 @@ export default function BetOnFavourites() {
       )}
 
       <div className="text-center mb-6">
-        <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Bet on Favrouties</h2>
+        <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Bet on Favourites</h2>
         <p className="text-gray-400 text-sm md:text-base max-w-2xl mx-auto mb-4">
           Pre-match player picks — runs and wickets milestones. Betting closes when the match goes live.
         </p>
