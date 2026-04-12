@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStore } from '../../store/store';
 import { API_BASE } from '../../lib/api';
+import { formatInr, publicUploadUrl } from '../../lib/moneyDisplay';
 
 type DepositInfo = {
   coinsPerInr: number;
@@ -10,6 +11,7 @@ type DepositInfo = {
     label: string;
     kind: string;
     upiId?: string;
+    upiQrPath?: string;
     bankName?: string;
     accountNumber?: string;
     ifsc?: string;
@@ -158,9 +160,9 @@ export default function WalletPage() {
           <div className="bg-gradient-to-br from-indigo-900 to-purple-900 rounded-3xl p-8 shadow-2xl relative overflow-hidden flex flex-col justify-between min-h-56">
             <div className="absolute top-0 right-[-10%] w-64 h-64 bg-white/5 rounded-full blur-3xl" />
             <div>
-              <h3 className="text-indigo-200/80 font-medium tracking-wider uppercase text-xs mb-3">Available Coin Balance</h3>
-              <div className="text-6xl font-black text-white flex items-center gap-3 tabular-nums">
-                🪙 {user?.coinsBalance?.toLocaleString() || 0}
+              <h3 className="text-indigo-200/80 font-medium tracking-wider uppercase text-xs mb-3">Wallet balance (INR)</h3>
+              <div className="text-5xl sm:text-6xl font-black text-white flex items-center gap-3 tabular-nums">
+                {formatInr(user?.coinsBalance ?? 0)}
               </div>
               {(user?.creditsBalance ?? 0) > 0 && (
                 <p className="text-indigo-200/90 mt-2 text-sm">Credits: ✨ {user?.creditsBalance?.toLocaleString()}</p>
@@ -209,7 +211,7 @@ export default function WalletPage() {
 
             {transactionType === 'deposit' && (
               <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-300 text-xs">
-                Pay the amount below to our UPI/bank using the selected account, then submit your UTR. Coins are added after admin verifies the payment.
+                Pay the amount below to our UPI/bank using the selected account, then submit your UTR. Your wallet is credited in INR after admin verifies the payment.
               </div>
             )}
 
@@ -229,8 +231,8 @@ export default function WalletPage() {
                       />
                     </div>
                     <p className="text-xs text-gray-500 mt-1.5">
-                      Rate: {depositInfo?.coinsPerInr ?? '—'} coins per ₹1 → you will receive{' '}
-                      <span className="text-yellow-400 font-bold">{expectedCoins.toLocaleString()} coins</span> after approval.
+                      Credit multiplier: {depositInfo?.coinsPerInr ?? '—'}× wallet INR per ₹1 paid → you will receive{' '}
+                      <span className="text-yellow-400 font-bold">{formatInr(expectedCoins)}</span> after approval.
                     </p>
                   </div>
                   <div>
@@ -261,6 +263,16 @@ export default function WalletPage() {
                           <>
                             <p className="text-gray-400 text-xs">UPI ID</p>
                             <p className="font-mono font-bold text-white break-all">{a.upiId}</p>
+                            {publicUploadUrl(a.upiQrPath) && (
+                              <div className="mt-3">
+                                <p className="text-gray-400 text-xs mb-1">Scan to pay</p>
+                                <img
+                                  src={publicUploadUrl(a.upiQrPath)}
+                                  alt="UPI QR code"
+                                  className="max-w-[200px] rounded-lg border border-gray-600 bg-white p-1"
+                                />
+                              </div>
+                            )}
                           </>
                         ) : (
                           <>
@@ -288,9 +300,9 @@ export default function WalletPage() {
               ) : (
                 <>
                   <div>
-                    <label className="text-gray-400 text-xs font-medium mb-1.5 block">Amount (coins)</label>
+                    <label className="text-gray-400 text-xs font-medium mb-1.5 block">Amount (INR)</label>
                     <div className="flex items-center gap-3 bg-gray-900/80 py-3 px-4 rounded-xl border border-gray-700 focus-within:border-indigo-500 transition-colors">
-                      <span>🪙</span>
+                      <span>₹</span>
                       <input
                         type="number"
                         value={amountInr}
@@ -379,8 +391,8 @@ export default function WalletPage() {
                         t.type === 'deposit' || t.type === 'prediction_win' ? 'text-emerald-400' : t.type === 'admin_adjustment' ? 'text-cyan-400' : 'text-red-400'
                       }`}
                     >
-                      {t.type === 'deposit' || t.type === 'prediction_win' || t.type === 'admin_adjustment' ? '+' : '-'}
-                      {t.amount?.toLocaleString()}
+                      {t.type === 'deposit' || t.type === 'prediction_win' || t.type === 'admin_adjustment' ? '+' : '−'}
+                      {formatInr(t.amount ?? 0)}
                     </div>
                   </div>
                 ))
@@ -394,7 +406,7 @@ export default function WalletPage() {
                   <div key={d._id} className="flex items-center justify-between px-6 py-4 hover:bg-gray-700/20 transition">
                     <div>
                       <p className="font-medium text-white">
-                        ₹{d.amountInr?.toLocaleString()} → {d.coinsToCredit?.toLocaleString()} coins
+                        ₹{d.amountInr?.toLocaleString('en-IN')} → {formatInr(d.coinsToCredit ?? 0)} credited
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5">
                         Ref: {d.utrReference} · {d.paymentAccountId?.label || 'Account'}
@@ -419,7 +431,7 @@ export default function WalletPage() {
                       {w.adminNote && <p className="text-xs text-gray-400 mt-1 italic">Admin: {w.adminNote}</p>}
                     </div>
                     <div className="text-right">
-                      <p className="font-black text-lg text-red-300 tabular-nums">-{w.amount?.toLocaleString()}</p>
+                      <p className="font-black text-lg text-red-300 tabular-nums">−{formatInr(w.amount ?? 0)}</p>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${statusColor(w.status)}`}>{w.status?.toUpperCase()}</span>
                     </div>
                   </div>

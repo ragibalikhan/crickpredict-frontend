@@ -6,6 +6,7 @@ import { useStore, type BallSlot } from '../../../store/store';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { API_BASE } from '../../../lib/api';
+import { formatInr } from '../../../lib/moneyDisplay';
 import TeamAvatar from '../../../components/TeamAvatar';
 import { clampStakeAmount, MAX_STAKE_COINS, MIN_STAKE_COINS } from '../../../lib/betLimits';
 
@@ -168,7 +169,7 @@ export default function MatchPage() {
       if (res.ok && typeof data.coinsBalance === 'number') {
         updateCoins(data.coinsBalance);
         if (data.activity) setBetActivity(data.activity);
-        const msg = `You placed your bet: ${stake} coins on "${value}"`;
+        const msg = `You placed your bet: ${formatInr(stake)} on "${value}"`;
         setToastMsg(msg);
         setBetPlacedPopup(msg);
         addNotification({
@@ -180,7 +181,7 @@ export default function MatchPage() {
           createdAt: new Date().toISOString(),
         });
       } else {
-        alert(data?.message || 'Failed to place prediction. Check your coins or if predictions are locked.');
+        alert(data?.message || 'Failed to place prediction. Check your balance (INR) or if predictions are locked.');
       }
     } catch {
       alert(
@@ -627,10 +628,10 @@ export default function MatchPage() {
           <>
           <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center mb-6 sm:mb-8 gap-4 border-b border-gray-700/50 pb-4 sm:pb-6">
             <h2 className="text-xl sm:text-2xl font-bold flex flex-wrap items-center gap-2 sm:gap-3">
-              <div className="p-2 bg-yellow-500/10 rounded-lg"><span className="text-2xl leading-none">🪙</span></div>
-              <span className="text-gray-300">Balance:</span> 
+              <div className="p-2 bg-yellow-500/10 rounded-lg text-yellow-400 font-black text-sm px-2">₹</div>
+              <span className="text-gray-300">Balance:</span>
               <span className="text-yellow-400 font-black tabular-nums transition-all duration-300">
-                {(user?.coinsBalance ?? 0).toLocaleString()}
+                {formatInr(user?.coinsBalance ?? 0)}
               </span>
               {user?.currentStreak && user.currentStreak >= 3 && (
                 <span className="text-xs bg-emerald-500 text-white px-2 py-1 rounded-md ml-2 animate-bounce">
@@ -639,7 +640,7 @@ export default function MatchPage() {
               )}
             </h2>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between sm:justify-end gap-2 bg-gray-900/50 py-2.5 px-3 sm:px-4 rounded-xl border border-gray-700/50 w-full sm:w-auto">
-              <label className="text-gray-400 font-medium text-sm sm:text-base shrink-0">Stake (coins)</label>
+              <label className="text-gray-400 font-medium text-sm sm:text-base shrink-0">Stake (INR)</label>
               <div className="flex flex-col items-end gap-0.5 w-full sm:w-auto">
               <input
                 type="text"
@@ -663,7 +664,7 @@ export default function MatchPage() {
                 className="bg-gray-700 px-3 sm:px-4 py-2 rounded-lg w-full max-w-[8rem] sm:w-28 text-center text-lg sm:text-xl font-bold font-mono focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all border border-gray-600"
               />
               <span className="text-[10px] text-gray-500 text-right w-full sm:w-auto">
-                Min {MIN_STAKE_COINS.toLocaleString()} · Max {MAX_STAKE_COINS.toLocaleString()}
+                Min {formatInr(MIN_STAKE_COINS)} · Max {formatInr(MAX_STAKE_COINS)}
               </span>
               </div>
             </div>
@@ -880,7 +881,7 @@ export default function MatchPage() {
                         </div>
                         <div className="flex items-center gap-3 text-gray-300">
                           <span className="text-gray-400 truncate max-w-[140px]">{b.predictionValue}</span>
-                          <span className="font-mono text-yellow-400/90">{b.amountStaked} 🪙</span>
+                          <span className="font-mono text-yellow-400/90">{formatInr(b.amountStaked)}</span>
                           <span className="text-gray-600 text-xs">
                             {b.multiplier?.toFixed?.(1) ?? b.multiplier}x
                           </span>

@@ -62,7 +62,7 @@ export default function Dashboard() {
     if (typeof window !== 'undefined' && sessionStorage.getItem('signup_bonus_toast')) {
       // Small delay to ensure the UI is rendered
       setTimeout(() => {
-        alert('🎉 You received 50 coins signup bonus! Deposit ₹100 to unlock it.');
+        alert('🎉 You received ₹50 signup bonus in your wallet! Deposit ₹100 to unlock it.');
         sessionStorage.removeItem('signup_bonus_toast');
       }, 500);
     }

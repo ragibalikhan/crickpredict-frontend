@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../../store/store';
 import { API_BASE } from '../../lib/api';
+import { formatInr } from '../../lib/moneyDisplay';
 import Link from 'next/link';
 
 interface BonusStatus {
@@ -93,7 +94,7 @@ export default function ReferPage() {
 
   const shareWhatsApp = () => {
     if (!referralData) return;
-    const text = `🏏 Join me on ${siteName}! Use my referral code: ${referralData.referralCode} and get 50 bonus coins to start betting on live cricket! ${referralData.referralLink}`;
+    const text = `🏏 Join me on ${siteName}! Use my referral code: ${referralData.referralCode} and get ₹50 bonus wallet credit to start betting on live cricket! ${referralData.referralLink}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -102,7 +103,7 @@ export default function ReferPage() {
     if (navigator.share) {
       await navigator.share({
         title: `${siteName} — Predict & Win`,
-        text: `Join me on ${siteName}! Use code: ${referralData.referralCode} and get 50 bonus coins!`,
+        text: `Join me on ${siteName}! Use code: ${referralData.referralCode} and get ₹50 bonus wallet credit!`,
         url: referralData.referralLink,
       });
     } else {
@@ -145,7 +146,9 @@ export default function ReferPage() {
               Refer & Earn
             </span>
           </h1>
-          <p className="text-gray-400 text-lg">Invite friends and earn <strong className="text-emerald-400">50 coins</strong> for each signup!</p>
+          <p className="text-gray-400 text-lg">
+            Invite friends and earn <strong className="text-emerald-400">{formatInr(50)}</strong> for each signup!
+          </p>
         </div>
 
         {loading ? (
@@ -157,7 +160,7 @@ export default function ReferPage() {
             {/* Referral Share Card */}
             <div className="bg-gradient-to-br from-emerald-900/60 to-teal-900/60 rounded-3xl p-8 border border-emerald-500/20 shadow-2xl">
               <h2 className="text-2xl font-bold mb-2">📤 Share Your Referral</h2>
-              <p className="text-emerald-300/70 text-sm mb-6">Your friend signs up → You both benefit! You earn 50 coins instantly.</p>
+              <p className="text-emerald-300/70 text-sm mb-6">Your friend signs up → You both benefit! You earn {formatInr(50)} instantly.</p>
 
               {/* Referral Code */}
               <div className="mb-5">
@@ -219,12 +222,12 @@ export default function ReferPage() {
                 <p className="text-4xl font-black text-white">{referralStats?.totalReferrals ?? 0}</p>
               </div>
               <div className="bg-gray-800/60 rounded-2xl p-6 border border-gray-700/50 text-center">
-                <p className="text-gray-400 text-sm mb-1">Coins Earned</p>
-                <p className="text-4xl font-black text-emerald-400">🪙 {referralStats?.totalReferralEarnings ?? 0}</p>
+                <p className="text-gray-400 text-sm mb-1">Referral earnings (INR)</p>
+                <p className="text-4xl font-black text-emerald-400">{formatInr(referralStats?.totalReferralEarnings ?? 0)}</p>
               </div>
               <div className="bg-gray-800/60 rounded-2xl p-6 border border-gray-700/50 text-center col-span-2 md:col-span-1">
                 <p className="text-gray-400 text-sm mb-1">Your Balance</p>
-                <p className="text-4xl font-black text-yellow-400">🪙 {user.coinsBalance?.toLocaleString()}</p>
+                <p className="text-4xl font-black text-yellow-400">{formatInr(user.coinsBalance ?? 0)}</p>
               </div>
             </div>
 
@@ -239,7 +242,7 @@ export default function ReferPage() {
                 </div>
 
                 <div className="flex items-center gap-4 p-4 bg-gray-900/50 rounded-2xl border border-gray-700/30">
-                  <span className="text-4xl font-black text-yellow-400">🪙 {bonusStatus.amount}</span>
+                  <span className="text-4xl font-black text-yellow-400">{formatInr(bonusStatus.amount)}</span>
                   <div>
                     <p className="font-bold text-white">Signup Bonus</p>
                     <p className="text-xs text-gray-400">Expires: {new Date(bonusStatus.expiresAt).toLocaleDateString()}</p>
@@ -262,7 +265,7 @@ export default function ReferPage() {
                     <div className="flex items-center justify-between text-sm text-gray-400 mb-2">
                       <span>Progress</span>
                       <span className="font-mono font-bold text-white">
-                        {bonusStatus.wageringProgress} / {bonusStatus.wageringRequired} coins
+                        {formatInr(bonusStatus.wageringProgress)} / {formatInr(bonusStatus.wageringRequired)} (INR wagered)
                       </span>
                     </div>
                     <div className="w-full bg-gray-700/50 rounded-full h-4 overflow-hidden">
@@ -281,7 +284,9 @@ export default function ReferPage() {
                 {bonusStatus.status === 'withdrawable' && (
                   <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
                     <p className="text-emerald-300 font-semibold mb-1">✅ Ready to Withdraw!</p>
-                    <p className="text-emerald-300/70 text-sm">Wagering complete! Your bonus of 🪙 {bonusStatus.amount} is now withdrawable.</p>
+                    <p className="text-emerald-300/70 text-sm">
+                      Wagering complete! Your bonus of {formatInr(bonusStatus.amount)} is now withdrawable.
+                    </p>
                     <Link href="/wallet" className="mt-3 inline-block px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-xl transition text-sm">
                       Withdraw Now →
                     </Link>
@@ -291,7 +296,7 @@ export default function ReferPage() {
                 {bonusStatus.status === 'expired' && (
                   <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
                     <p className="text-red-400 font-semibold">❌ Bonus Expired</p>
-                    <p className="text-red-400/60 text-sm mt-1">Your signup bonus has expired. Refer friends to earn more coins!</p>
+                    <p className="text-red-400/60 text-sm mt-1">Your signup bonus has expired. Refer friends to earn more!</p>
                   </div>
                 )}
               </div>
@@ -303,8 +308,8 @@ export default function ReferPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
                   { step: '1', icon: '🔗', title: 'Share your link', desc: 'Share your unique referral link or code with friends' },
-                  { step: '2', icon: '👤', title: 'Friend signs up', desc: 'Your friend registers using your code — they get 50 bonus coins!' },
-                  { step: '3', icon: '🪙', title: 'You earn coins', desc: 'You instantly receive 50 coins credited to your account' },
+                  { step: '2', icon: '👤', title: 'Friend signs up', desc: 'Your friend registers using your code — they get ₹50 bonus wallet credit!' },
+                  { step: '3', icon: '₹', title: 'You earn', desc: 'You instantly receive ₹50 credited to your wallet (INR)' },
                 ].map(item => (
                   <div key={item.step} className="flex flex-col items-center text-center p-6 bg-gray-900/40 rounded-2xl border border-gray-700/30">
                     <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center font-black text-sm mb-3">{item.step}</div>
@@ -330,7 +335,7 @@ export default function ReferPage() {
                         <p className="text-xs text-gray-500">{new Date(r.createdAt).toLocaleDateString()}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-emerald-400">+{r.bonusAmount} 🪙</p>
+                        <p className="font-bold text-emerald-400">+{formatInr(r.bonusAmount)}</p>
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${r.status === 'credited' ? 'text-emerald-400 bg-emerald-500/10' : r.status === 'expired' ? 'text-red-400 bg-red-500/10' : 'text-yellow-400 bg-yellow-500/10'}`}>
                           {r.status.toUpperCase()}
                         </span>

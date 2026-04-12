@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useGlobalSocket } from '../hooks/useSocket';
 import { API_BASE } from '../lib/api';
+import { formatInr } from '../lib/moneyDisplay';
 
 export default function Navbar() {
   const { user, logout, notifications, markAllRead, token, setNotifications, siteBranding } = useStore();
@@ -152,10 +153,9 @@ export default function Navbar() {
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Coin Balance */}
+              {/* Wallet (INR) */}
               <div className="flex items-center gap-1.5 bg-yellow-500/10 px-3 py-1.5 rounded-full border border-yellow-500/20">
-                <span>🪙</span>
-                <span className="font-bold text-yellow-400 tabular-nums text-sm">{user.coinsBalance?.toLocaleString()}</span>
+                <span className="font-bold text-yellow-400 tabular-nums text-sm">{formatInr(user.coinsBalance ?? 0)}</span>
               </div>
 
               {/* Notification Bell */}
@@ -218,7 +218,7 @@ export default function Navbar() {
                       {user.username?.charAt(0).toUpperCase()}
                     </div>
                     <p className="font-bold text-white truncate">{user.username}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">🪙 {user.coinsBalance?.toLocaleString()} coins</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{formatInr(user.coinsBalance ?? 0)} balance</p>
                   </div>
                   <div className="p-2">
                     {[

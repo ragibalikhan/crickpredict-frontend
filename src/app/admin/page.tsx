@@ -1,8 +1,9 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, type ChangeEvent } from 'react';
 import { useStore } from '../../store/store';
 import { useRouter } from 'next/navigation';
 import { API_BASE } from '../../lib/api';
+import { formatInr, publicUploadUrl } from '../../lib/moneyDisplay';
 
 const BALL_OUTCOME_ORDER = ['Dot', '1-2 Runs', '4 Runs', '6 Runs', 'Wicket', 'Extras'];
 
@@ -444,7 +445,7 @@ export default function AdminPage() {
 
   const saveCoinRate = async () => {
     const n = Number(coinRateDraft);
-    if (!Number.isFinite(n) || n < 1) return showToast('Enter a valid coins-per-₹1 value', 'error');
+    if (!Number.isFinite(n) || n < 1) return showToast('Enter a valid wallet multiplier (per ₹1 paid)', 'error');
     setActionLoading('coinRate');
     const res = await fetch(`${API_BASE}/admin/settings/coin-rate`, {
       method: 'PATCH',
@@ -452,7 +453,7 @@ export default function AdminPage() {
       body: JSON.stringify({ coinsPerInr: n }),
     });
     if (res.ok) {
-      showToast('Coin rate updated');
+      showToast('Wallet credit rate updated');
       fetchStats();
     } else {
       const d = await res.json();
@@ -653,7 +654,7 @@ export default function AdminPage() {
     setActionLoading(id + '_dapprove');
     const res = await fetch(`${API_BASE}/admin/deposits/${id}/approve`, { method: 'PATCH', headers });
     if (res.ok) {
-      showToast('Deposit approved — coins credited');
+      showToast('Deposit approved — wallet credited (INR)');
       fetchDeposits();
       fetchStats();
       fetchAccounts();
@@ -786,6 +787,35 @@ export default function AdminPage() {
     setActionLoading(null);
   };
 
+  const resyncMatchFeed = async () => {
+    setActionLoading('matchResync');
+    const res = await fetch(`${API_BASE}/admin/matches/resync-feed`, { method: 'POST', headers });
+    const d = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+    setActionLoading(null);
+    if (res.ok && d.ok) showToast(d.message || 'Matches synced');
+    else showToast(d.message || 'Sync failed', 'error');
+  };
+
+  const uploadUpiQr = async (accountId: string, e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !token) return;
+    setActionLoading('upiqr_' + accountId);
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`${API_BASE}/admin/payment-accounts/${accountId}/upi-qr`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    });
+    const d = (await res.json().catch(() => ({}))) as { message?: string };
+    setActionLoading(null);
+    if (res.ok) {
+      showToast('UPI QR code updated');
+      fetchAccounts();
+    } else showToast(d.message || 'Upload failed', 'error');
+  };
+
   const sendNotification = async () => {
     if (!notifyForm.title || !notifyForm.message) return showToast('Fill in title and message', 'error');
     setActionLoading('notify');
@@ -844,7 +874,7 @@ export default function AdminPage() {
             </p>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-gray-500">Coins balance 🪙</label>
+                <label className="text-xs text-gray-500">Wallet balance (INR)</label>
                 <input
                   type="number"
                   className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-white"
@@ -923,7 +953,7 @@ export default function AdminPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-black text-white">Admin Control Panel</h1>
-            <p className="text-gray-400 mt-1">Users, INR deposits, payment accounts, coin rate, withdrawals</p>
+            <p className="text-gray-400 mt-1">Users, INR deposits, payment accounts, wallet rate, withdrawals</p>
           </div>
           <span className="px-3 py-1 bg-red-500/10 border border-red-500/30 text-red-400 rounded-full text-sm font-bold tracking-wider">ADMIN</span>
         </div>
@@ -956,7 +986,12 @@ export default function AdminPage() {
                 { label: 'Pending deposits', value: stats.pendingDeposits, icon: '⏳', color: 'from-amber-600 to-orange-600' },
                 { label: 'Pending Withdrawals', value: stats.pendingWithdrawals, icon: '⏳', color: 'from-yellow-600 to-orange-600' },
                 { label: 'Total Withdrawals', value: stats.totalWithdrawals, icon: '💸', color: 'from-purple-600 to-pink-600' },
-                { label: 'Coins in Circulation', value: stats.totalCoinsInCirculation.toLocaleString(), icon: '🪙', color: 'from-yellow-500 to-amber-500' },
+                {
+                  label: 'Wallet total (INR units)',
+                  value: formatInr(stats.totalCoinsInCirculation),
+                  icon: '₹',
+                  color: 'from-yellow-500 to-amber-500',
+                },
                 { label: 'Total Wins', value: stats.totalWins, icon: '✅', color: 'from-emerald-600 to-teal-600' },
                 { label: 'Total Losses', value: stats.totalLosses, icon: '❌', color: 'from-red-600 to-rose-600' },
               ].map((s) => (
@@ -966,6 +1001,23 @@ export default function AdminPage() {
                   <p className="text-3xl font-black text-white">{s.value}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h3 className="font-bold text-lg">Resync live &amp; upcoming matches</h3>
+                <p className="text-sm text-gray-400 mt-1 max-w-xl">
+                  Runs the same feed pull as the background job (CricAPI when enabled, otherwise the live-scores scraper). Use this if fixtures or scores look stuck.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={resyncMatchFeed}
+                disabled={!!actionLoading}
+                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold disabled:opacity-50 shrink-0"
+              >
+                {actionLoading === 'matchResync' ? 'Syncing…' : '↻ Resync now'}
+              </button>
             </div>
 
             {betOutcomeStats && (
@@ -1066,7 +1118,7 @@ export default function AdminPage() {
                         <th className="px-3 py-2 text-left">Match</th>
                         <th className="px-3 py-2 text-left">Status</th>
                         <th className="px-3 py-2 text-right">Bets</th>
-                        <th className="px-3 py-2 text-right">Staked 🪙</th>
+                        <th className="px-3 py-2 text-right">Staked (INR)</th>
                         <th className="px-3 py-2 text-right">Won</th>
                         <th className="px-3 py-2 text-right">Lost</th>
                         <th className="px-3 py-2 text-right">Pending</th>
@@ -1084,11 +1136,11 @@ export default function AdminPage() {
                           </td>
                           <td className="px-3 py-2 capitalize text-gray-300">{row.matchStatus ?? '—'}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{row.totalBets}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{row.totalStaked?.toLocaleString?.() ?? row.totalStaked}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{formatInr(row.totalStaked ?? 0)}</td>
                           <td className="px-3 py-2 text-right text-emerald-400 tabular-nums">{row.wonCount}</td>
                           <td className="px-3 py-2 text-right text-rose-400 tabular-nums">{row.lostCount}</td>
                           <td className="px-3 py-2 text-right text-amber-300/90 tabular-nums">{row.pendingCount}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{row.totalWonPayout?.toLocaleString?.() ?? row.totalWonPayout}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{formatInr(row.totalWonPayout ?? 0)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1098,11 +1150,13 @@ export default function AdminPage() {
             )}
 
             <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 max-w-xl">
-              <h3 className="font-bold text-lg mb-1">Coin value (INR)</h3>
-              <p className="text-sm text-gray-400 mb-4">How many coins users receive per ₹1 paid. Example: 10 means ₹100 → 1,000 coins.</p>
+              <h3 className="font-bold text-lg mb-1">Deposit → wallet credit</h3>
+              <p className="text-sm text-gray-400 mb-4">
+                Multiplier of wallet balance (shown as INR) credited per ₹1 deposited. Example: 10 means ₹100 paid → ₹1,000 wallet credit after approval.
+              </p>
               <div className="flex gap-3 flex-wrap items-end">
                 <div>
-                  <label className="text-xs text-gray-500">Coins per ₹1</label>
+                  <label className="text-xs text-gray-500">Wallet units per ₹1 paid</label>
                   <input
                     type="number"
                     min={1}
@@ -1138,7 +1192,7 @@ export default function AdminPage() {
                   <thead>
                     <tr className="bg-gray-900/50 text-gray-400 text-xs uppercase tracking-wider">
                       <th className="px-4 py-3 text-left">User</th>
-                      <th className="px-4 py-3 text-right">Coins 🪙</th>
+                      <th className="px-4 py-3 text-right">Balance (INR)</th>
                       <th className="px-4 py-3 text-right">Credits</th>
                       <th className="px-4 py-3 text-right">Wins</th>
                       <th className="px-4 py-3 text-right">Losses</th>
@@ -1168,7 +1222,9 @@ export default function AdminPage() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-right font-mono font-bold text-yellow-400">{u.coinsBalance?.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-yellow-400">
+                            {formatInr(u.coinsBalance ?? 0)}
+                          </td>
                           <td className="px-4 py-3 text-right font-mono text-cyan-300">{(u.creditsBalance ?? 0).toLocaleString()}</td>
                           <td className="px-4 py-3 text-right text-emerald-400 font-semibold">{u.totalWins || 0}</td>
                           <td className="px-4 py-3 text-right text-red-400 font-semibold">{u.totalLosses || 0}</td>
@@ -1335,8 +1391,8 @@ export default function AdminPage() {
                         <p className="font-black text-white">₹{d.amountInr?.toLocaleString()}</p>
                       </div>
                       <div className="bg-gray-900/50 rounded-xl p-3">
-                        <p className="text-xs text-gray-500">Coins to credit</p>
-                        <p className="font-black text-yellow-400">🪙 {d.coinsToCredit?.toLocaleString()}</p>
+                        <p className="text-xs text-gray-500">Wallet credit (INR)</p>
+                        <p className="font-black text-yellow-400">{formatInr(d.coinsToCredit ?? 0)}</p>
                       </div>
                       <div className="bg-gray-900/50 rounded-xl p-3 col-span-2 md:col-span-1">
                         <p className="text-xs text-gray-500">UTR / ref</p>
@@ -1422,7 +1478,7 @@ export default function AdminPage() {
                     <div className="grid grid-cols-2 gap-4 mt-3">
                       <div className="bg-gray-900/50 rounded-xl p-3">
                         <p className="text-xs text-gray-500 mb-0.5">Amount</p>
-                        <p className="font-black text-yellow-400 text-xl">🪙 {w.amount?.toLocaleString()}</p>
+                        <p className="font-black text-yellow-400 text-xl">{formatInr(w.amount ?? 0)}</p>
                       </div>
                       <div className="bg-gray-900/50 rounded-xl p-3">
                         <p className="text-xs text-gray-500 mb-0.5">UPI ID</p>
@@ -1536,6 +1592,9 @@ export default function AdminPage() {
               >
                 {actionLoading === 'newAcc' ? '...' : 'Add account'}
               </button>
+              <p className="text-xs text-gray-500 mt-3">
+                For UPI accounts: after adding, use <strong>Upload / replace QR</strong> in the list below to attach a payee QR image (shown with the UPI ID on the wallet deposit screen).
+              </p>
             </div>
 
             {loading ? (
@@ -1551,7 +1610,28 @@ export default function AdminPage() {
                         <span className="text-xs text-gray-500 uppercase">{a.kind}</span>
                       </div>
                       {a.kind === 'upi' ? (
-                        <p className="font-mono text-emerald-400">{a.upiId}</p>
+                        <div className="space-y-2">
+                          <p className="font-mono text-emerald-400">{a.upiId}</p>
+                          {publicUploadUrl(a.upiQrPath) && (
+                            <img
+                              src={publicUploadUrl(a.upiQrPath)}
+                              alt="UPI QR"
+                              className="h-24 w-24 rounded-lg border border-gray-600 bg-white p-1 object-contain"
+                            />
+                          )}
+                          <label className="inline-flex items-center gap-2 text-xs text-indigo-300 cursor-pointer">
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              className="hidden"
+                              disabled={!!actionLoading}
+                              onChange={(e) => uploadUpiQr(a._id, e)}
+                            />
+                            <span className="px-2 py-1 rounded-lg bg-indigo-600/40 hover:bg-indigo-600/60 font-semibold">
+                              {actionLoading === 'upiqr_' + a._id ? '…' : 'Upload / replace QR'}
+                            </span>
+                          </label>
+                        </div>
                       ) : (
                         <div className="text-sm text-gray-300 space-y-0.5">
                           <p>{a.bankName}</p>
@@ -1658,7 +1738,7 @@ export default function AdminPage() {
               <h3 className="text-lg font-bold text-white">Simulated live crowd (demo)</h3>
               <p className="text-sm text-gray-400">
                 When enabled, random Indian-style display names place fake ball bets on <strong className="text-gray-300">live</strong>{' '}
-                matches. No coins are debited or credited. Bets appear in &quot;Live bets on this match&quot;. When each ball settles, simulated
+                matches. No wallet amounts are debited or credited. Bets appear in &quot;Live bets on this match&quot;. When each ball settles, simulated
                 bets randomly win at the rate below (default 80%). Admin betting stats ignore these rows.
               </p>
               <label className="flex items-center gap-3 cursor-pointer">
@@ -1790,7 +1870,7 @@ export default function AdminPage() {
 
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-xs text-gray-500 uppercase font-bold tracking-wider">Signup Bonus Amount (Coins) 🪙</label>
+                  <label className="text-xs text-gray-500 uppercase font-bold tracking-wider">Signup bonus (INR in wallet)</label>
                   <input
                     type="number"
                     className="block mt-1.5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 w-full text-white"
@@ -1801,7 +1881,7 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs text-gray-500 uppercase font-bold tracking-wider">Signup Starting Coins 🆕</label>
+                  <label className="text-xs text-gray-500 uppercase font-bold tracking-wider">Signup starting balance (INR) 🆕</label>
                   <input
                     type="number"
                     className="block mt-1.5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 w-full text-white"
@@ -1835,7 +1915,7 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs text-gray-500 uppercase font-bold tracking-wider">Referral Reward (Coins) 🎁</label>
+                  <label className="text-xs text-gray-500 uppercase font-bold tracking-wider">Referral reward (INR in wallet) 🎁</label>
                   <input
                     type="number"
                     className="block mt-1.5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 w-full text-white"

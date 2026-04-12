@@ -1,6 +1,7 @@
 'use client';
 
 import { useStore } from '../store/store';
+import { formatInr } from '../lib/moneyDisplay';
 
 /**
  * Win/lose overlay — same pattern as the match page “Bet placed” popup (fixed backdrop + card + OK).
@@ -49,18 +50,14 @@ export default function BetSettlementModal() {
         </p>
         <div className="mt-4 rounded-2xl bg-gray-800/80 border border-gray-700/80 p-4 space-y-2 text-center">
           {won ? (
-            <p className="text-emerald-300 font-mono text-lg font-bold">
-              +{payout.toLocaleString()} <span className="text-yellow-400">🪙</span> paid out
-            </p>
+            <p className="text-emerald-300 font-mono text-lg font-bold">+{formatInr(payout)} paid out</p>
           ) : (
-            <p className="text-amber-200/90 font-mono text-lg font-bold">
-              −{stake.toLocaleString()} <span className="text-yellow-400">🪙</span> stake
-            </p>
+            <p className="text-amber-200/90 font-mono text-lg font-bold">−{formatInr(stake)} stake</p>
           )}
           {typeof coinsBalance === 'number' && (
             <p className="text-gray-500 text-xs font-medium">
               New balance:{' '}
-              <span className="text-gray-200 font-mono tabular-nums">{coinsBalance.toLocaleString()}</span> coins
+              <span className="text-gray-200 font-mono tabular-nums">{formatInr(coinsBalance)}</span>
             </p>
           )}
         </div>

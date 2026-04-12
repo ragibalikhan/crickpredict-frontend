@@ -1,4 +1,5 @@
 import { useStore } from '../store/store';
+import { formatInr } from './moneyDisplay';
 
 const handledIds = new Set<string>();
 const STORAGE_KEY = 'crickpredict_settlement_ids_v1';
@@ -90,8 +91,8 @@ export function handlePredictionResultEvent(data: PredictionResultPayload): void
     _id: `pred-result-${id}`,
     title: won ? 'You won the bet!' : 'You lost the bet',
     message: won
-      ? `+${payout.toLocaleString()} coins. Balance: ${bal.toLocaleString()}`
-      : `Stake ${stake.toLocaleString()} not returned. Balance: ${bal.toLocaleString()}`,
+      ? `+${formatInr(payout)}. Balance: ${formatInr(bal)}`
+      : `Stake ${formatInr(stake)} not returned. Balance: ${formatInr(bal)}`,
     type: won ? 'success' : 'warning',
     read: false,
     createdAt: new Date().toISOString(),

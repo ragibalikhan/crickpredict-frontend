@@ -93,7 +93,7 @@ function RegisterForm() {
 
           {referralCode && (
             <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm flex items-center gap-2">
-              🎁 Referral code <strong>{referralCode}</strong> applied — get 50 bonus coins!
+              🎁 Referral code <strong>{referralCode}</strong> applied — get ₹50 bonus wallet credit!
             </div>
           )}
 
@@ -141,7 +141,7 @@ function RegisterForm() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1.5">
-                Referral Code <span className="text-gray-600">(optional — get 50 bonus coins!)</span>
+                Referral Code <span className="text-gray-600">(optional — get ₹50 bonus wallet credit!)</span>
               </label>
               <input
                 id="reg-referral"

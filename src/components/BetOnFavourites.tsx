@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { API_BASE } from '../lib/api';
+import { formatInr } from '../lib/moneyDisplay';
 import { useStore } from '../store/store';
 import { clampStakeAmount, MAX_STAKE_COINS, MIN_STAKE_COINS } from '../lib/betLimits';
 
@@ -84,7 +85,7 @@ export default function BetOnFavourites() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && typeof data.coinsBalance === 'number') {
         updateCoins(data.coinsBalance);
-        setToast(`Bet placed: ${stake} coins on ${label}`);
+        setToast(`Bet placed: ${formatInr(stake)} on ${label}`);
         loadFeed();
       } else {
         alert((data as { message?: string })?.message || 'Could not place bet.');
@@ -145,12 +146,11 @@ export default function BetOnFavourites() {
             <span className="text-sm text-gray-400">
               Balance:{' '}
               <span className="font-mono font-bold text-yellow-400 tabular-nums">
-                {(user?.coinsBalance ?? 0).toLocaleString()}
-              </span>{' '}
-              coins
+                {formatInr(user?.coinsBalance ?? 0)}
+              </span>
             </span>
             <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-500">Stake</label>
+              <label className="text-sm text-gray-500">Stake (INR)</label>
               <input
                 type="text"
                 inputMode="numeric"
@@ -169,7 +169,7 @@ export default function BetOnFavourites() {
                 className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 w-28 text-center font-mono font-bold text-white"
               />
               <span className="text-[10px] text-gray-600">
-                {MIN_STAKE_COINS}–{MAX_STAKE_COINS.toLocaleString()}
+                {formatInr(MIN_STAKE_COINS)}–{formatInr(MAX_STAKE_COINS)}
               </span>
             </div>
           </div>

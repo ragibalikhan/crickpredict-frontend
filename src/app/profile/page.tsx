@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store/store';
 import Link from 'next/link';
 import { apiJson } from '../../lib/api';
+import { formatInr } from '../../lib/moneyDisplay';
 import TeamAvatar from '../../components/TeamAvatar';
 
 export default function ProfilePage() {
@@ -165,10 +166,10 @@ export default function ProfilePage() {
                         <th className="px-4 py-3 font-semibold">Match</th>
                         <th className="px-4 py-3 font-semibold">Type</th>
                         <th className="px-4 py-3 font-semibold">Pick</th>
-                        <th className="px-4 py-3 font-semibold text-right">Stake</th>
+                        <th className="px-4 py-3 font-semibold text-right">Stake (INR)</th>
                         <th className="px-4 py-3 font-semibold text-right">Odds</th>
                         <th className="px-4 py-3 font-semibold">Result</th>
-                        <th className="px-4 py-3 font-semibold text-right">Coins</th>
+                        <th className="px-4 py-3 font-semibold text-right">Payout (INR)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-700/40">
@@ -196,9 +197,9 @@ export default function ProfilePage() {
                           );
                         const coinsCell =
                           b.status === 'won' && b.payoutCoins != null ? (
-                            <span className="text-emerald-400 font-mono font-bold">+{b.payoutCoins.toLocaleString()}</span>
+                            <span className="text-emerald-400 font-mono font-bold">+{formatInr(b.payoutCoins)}</span>
                           ) : b.status === 'lost' ? (
-                            <span className="text-red-400/90 font-mono font-bold">−{b.amountStaked.toLocaleString()}</span>
+                            <span className="text-red-400/90 font-mono font-bold">−{formatInr(b.amountStaked)}</span>
                           ) : (
                             <span className="text-gray-500 font-mono">—</span>
                           );
@@ -222,7 +223,7 @@ export default function ProfilePage() {
                             </td>
                             <td className="px-4 py-3.5 text-gray-300 capitalize">{b.type}</td>
                             <td className="px-4 py-3.5 text-white font-medium">{b.predictionValue}</td>
-                            <td className="px-4 py-3.5 text-right font-mono text-gray-200">{b.amountStaked.toLocaleString()}</td>
+                            <td className="px-4 py-3.5 text-right font-mono text-gray-200">{formatInr(b.amountStaked)}</td>
                             <td className="px-4 py-3.5 text-right font-mono text-gray-400">
                               {b.multiplier.toFixed(2)}×
                               {b.comboMultiplier > 1 && (
@@ -267,7 +268,9 @@ export default function ProfilePage() {
                   <div className="grid grid-cols-2 gap-4">
                      <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-700/30 text-center">
                         <p className="text-sm text-gray-400 font-medium tracking-wider mb-2">Total Balance</p>
-                        <p className="text-4xl font-black text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.3)]">🪙 {profileData?.coinsBalance}</p>
+                        <p className="text-4xl font-black text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.3)]">
+                          {formatInr(profileData?.coinsBalance ?? 0)}
+                        </p>
                      </div>
                      <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-700/30 text-center">
                         <p className="text-sm text-gray-400 font-medium tracking-wider mb-2">Current Streak</p>

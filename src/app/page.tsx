@@ -12,7 +12,7 @@ export default function Home() {
   const siteName = siteBranding?.siteName ?? 'CrickPredict';
   const siteDescription =
     siteBranding?.siteDescription ??
-    'Predict live IPL balls, overs, and batsman performance in real-time. Use your skill to accumulate coins and rewards.';
+    'Predict live IPL balls, overs, and batsman performance in real-time. Use your skill to grow your INR wallet and rewards.';
 
   useEffect(() => {
     if (token) router.replace('/dashboard');
@@ -70,7 +70,7 @@ export default function Home() {
           <div className="p-8 rounded-3xl bg-gray-800/40 border border-gray-700/50 backdrop-blur-sm">
             <div className="text-4xl mb-4">💰</div>
             <h3 className="text-xl font-bold text-white mb-2">Wallet &amp; bonuses</h3>
-            <p className="text-gray-400">Add money via UPI, track coins, and unlock referral and signup rewards in one place.</p>
+            <p className="text-gray-400">Add money via UPI, track your balance in INR, and unlock referral and signup rewards in one place.</p>
           </div>
         </div>
       </main>
