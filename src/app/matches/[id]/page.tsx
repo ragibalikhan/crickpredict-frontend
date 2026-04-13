@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { API_BASE } from '../../../lib/api';
 import { formatInr } from '../../../lib/moneyDisplay';
 import TeamAvatar from '../../../components/TeamAvatar';
+import MatchOutcomeBetting from '../../../components/MatchOutcomeBetting';
 import { clampStakeAmount, MAX_STAKE_COINS, MIN_STAKE_COINS } from '../../../lib/betLimits';
 
 /** Poll interval for score + match state (HTTP); socket still pushes faster when connected. */
@@ -621,6 +622,18 @@ export default function MatchPage() {
             ))}
           </div>
         </section>
+        )}
+
+        {showBettingCard && displayMatch && (
+          <MatchOutcomeBetting
+            matchId={matchId}
+            teamA={displayMatch.teamA}
+            teamB={displayMatch.teamB}
+            status={displayMatch.status}
+            token={token}
+            stake={clampStakeAmount(Number(stakeInput) || 0)}
+            onBalance={(coins) => updateCoins(coins)}
+          />
         )}
 
         <div className="bg-gray-800/80 backdrop-blur-md p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl shadow-xl border border-gray-700 mb-8 relative">

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback, type ChangeEvent } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, type ChangeEvent } from 'react';
 import { useStore } from '../../store/store';
 import { useRouter } from 'next/navigation';
 import { API_BASE } from '../../lib/api';
@@ -11,12 +11,14 @@ function PpImageEditorRow({
   marketId,
   initialUrl,
   headers,
+  adminFetch,
   onSaved,
   showToast,
 }: {
   marketId: string;
   initialUrl: string;
   headers: Record<string, string>;
+  adminFetch: (url: string, init?: RequestInit) => Promise<Response>;
   onSaved: (rows: unknown[]) => void;
   showToast: (msg: string, type?: string) => void;
 }) {
@@ -37,7 +39,7 @@ function PpImageEditorRow({
         type="button"
         className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 text-left"
         onClick={async () => {
-          const res = await fetch(`${API_BASE}/admin/player-props/markets/${marketId}`, {
+          const res = await adminFetch(`${API_BASE}/admin/player-props/markets/${marketId}`, {
             method: 'PATCH',
             headers,
             body: JSON.stringify({
@@ -79,8 +81,9 @@ type Tab =
   | 'playerProps';
 
 export default function AdminPage() {
-  const { token, user, setSiteBranding, siteBranding } = useStore();
+  const { token, user, setSiteBranding, siteBranding, logout } = useStore();
   const router = useRouter();
+  const sessionExpiredRef = useRef(false);
 
   useEffect(() => {
     if (!user || user.role !== 'admin') {
@@ -90,6 +93,8 @@ export default function AdminPage() {
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<any>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [matchBetting, setMatchBetting] = useState<
     Array<{
       matchId: string;
@@ -133,6 +138,7 @@ export default function AdminPage() {
     Wicket: '5.0',
     Extras: '2.0',
   });
+  const [tossBetDraft, setTossBetDraft] = useState('1.8');
   const [simCrowdDraft, setSimCrowdDraft] = useState({ enabled: false, winBiasPercent: 80 });
   const [bonusSettings, setBonusSettings] = useState({
     signupBonusAmount: 50,
@@ -160,6 +166,8 @@ export default function AdminPage() {
     accountHolderName: '',
     isPrimary: false,
   });
+  const [newUpiQrFile, setNewUpiQrFile] = useState<File | null>(null);
+  const newUpiQrInputRef = useRef<HTMLInputElement>(null);
 
   const [syncForm, setSyncForm] = useState<{ id: string; increment: string; setTotal: string } | null>(null);
   const [smsPaste, setSmsPaste] = useState('');
@@ -232,34 +240,79 @@ export default function AdminPage() {
     skip: number;
   } | null>(null);
 
-  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const headers = useMemo(
+    () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
+    [token],
+  );
 
   const showToast = (msg: string, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-  const fetchStats = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/admin/stats`, { headers });
-    if (res.ok) {
-      const s = await res.json();
-      setStats(s);
-      if (s.coinsPerInr != null) setCoinRateDraft(String(s.coinsPerInr));
-    }
+  const onAdminUnauthorized = useCallback(() => {
+    if (sessionExpiredRef.current) return;
+    sessionExpiredRef.current = true;
+    logout();
+    setToast({ msg: 'Session expired or invalid. Please sign in again.', type: 'error' });
+    setTimeout(() => setToast(null), 4500);
+    router.push('/login');
+  }, [logout, router]);
+
+  useEffect(() => {
+    sessionExpiredRef.current = false;
   }, [token]);
+
+  /** Admin API fetch: clears session and sends you to login on 401 (expired/wrong JWT vs backend). */
+  const adminFetch = useCallback(
+    async (url: string, init?: RequestInit): Promise<Response> => {
+      const h =
+        init?.body instanceof FormData
+          ? { Authorization: (headers as { Authorization: string }).Authorization }
+          : { ...headers, ...(init?.headers as Record<string, string> | undefined) };
+      const res = await fetch(url, { ...init, headers: h });
+      if (res.status === 401) onAdminUnauthorized();
+      return res;
+    },
+    [headers, onAdminUnauthorized],
+  );
+
+  const fetchStats = useCallback(async () => {
+    setStatsLoading(true);
+    setStatsError(null);
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/stats`);
+      if (res.ok) {
+        const s = await res.json();
+        setStats(s);
+        if (s.coinsPerInr != null) setCoinRateDraft(String(s.coinsPerInr));
+      } else if (res.status === 401) {
+        setStats(null);
+      } else {
+        const d = (await res.json().catch(() => ({}))) as { message?: string };
+        setStats(null);
+        setStatsError(d.message || `Could not load overview statistics (HTTP ${res.status}).`);
+      }
+    } catch {
+      setStats(null);
+      setStatsError('Network error — check that the API is running and API_BASE is correct.');
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [adminFetch]);
 
   const fetchMatchBetting = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/admin/matches/betting-stats`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/matches/betting-stats`, { headers });
     if (res.ok) setMatchBetting(await res.json());
-  }, [token]);
+  }, [adminFetch, headers]);
 
   const fetchBetOutcomeStats = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/admin/stats/bet-outcomes`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/stats/bet-outcomes`, { headers });
     if (res.ok) setBetOutcomeStats(await res.json());
-  }, [token]);
+  }, [adminFetch, headers]);
 
   const fetchBallMultipliers = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/admin/settings/ball-multipliers`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/settings/ball-multipliers`, { headers });
     if (!res.ok) return;
     const d = await res.json();
     const bm = d.ballMultipliers || {};
@@ -271,20 +324,30 @@ export default function AdminPage() {
       Wicket: String(bm.Wicket ?? 5.0),
       Extras: String(bm.Extras ?? 2.0),
     });
-  }, [token]);
+  }, [adminFetch, headers]);
+
+  const fetchTossBetSettings = useCallback(async () => {
+    const res = await adminFetch(`${API_BASE}/admin/settings/toss-bet`, { headers });
+    if (!res.ok) return;
+    const d = await res.json();
+    const m = d.tossBetMultiplier;
+    setTossBetDraft(
+      typeof m === 'number' && Number.isFinite(m) ? String(m) : '1.8',
+    );
+  }, [adminFetch, headers]);
 
   const fetchSimulatedCrowd = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/admin/settings/simulated-crowd`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/settings/simulated-crowd`, { headers });
     if (!res.ok) return;
     const d = await res.json();
     setSimCrowdDraft({
       enabled: !!d.simulatedCrowdEnabled,
       winBiasPercent: Math.min(100, Math.max(0, Math.round(Number(d.simulatedCrowdWinBias ?? 0.8) * 100))),
     });
-  }, [token]);
+  }, [adminFetch, headers]);
 
   const fetchBonusSettings = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/admin/settings/signup-bonus`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/settings/signup-bonus`, { headers });
     if (!res.ok) return;
     const d = await res.json();
     setBonusSettings(d);
@@ -296,10 +359,10 @@ export default function AdminPage() {
       referralBonusAmount: d.referralBonusAmount,
       bonusExpiryDays: d.bonusExpiryDays,
     });
-  }, [token]);
+  }, [adminFetch, headers]);
 
   const fetchBrandingSettings = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/admin/settings/site-branding`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/settings/site-branding`, { headers });
     if (!res.ok) return;
     const d = await res.json();
     setBrandingDraft({
@@ -311,43 +374,43 @@ export default function AdminPage() {
       siteDescription: d.siteDescription ?? 'Real-time IPL skill gaming platform',
       logoUrl: d.logoUrl ?? null,
     });
-  }, [token, setSiteBranding]);
+  }, [adminFetch, headers, setSiteBranding]);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`${API_BASE}/admin/users`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/users`, { headers });
     if (res.ok) setUsers(await res.json());
     setLoading(false);
-  }, [token]);
+  }, [adminFetch, headers]);
 
   const fetchWithdrawals = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`${API_BASE}/admin/withdrawals`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/withdrawals`, { headers });
     if (res.ok) setWithdrawals(await res.json());
     setLoading(false);
-  }, [token]);
+  }, [adminFetch, headers]);
 
   const fetchDeposits = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`${API_BASE}/admin/deposits`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/deposits`, { headers });
     if (res.ok) setDeposits(await res.json());
     setLoading(false);
-  }, [token]);
+  }, [adminFetch, headers]);
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`${API_BASE}/admin/payment-accounts`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/payment-accounts`, { headers });
     if (res.ok) setAccounts(await res.json());
     setLoading(false);
-  }, [token]);
+  }, [adminFetch, headers]);
 
   const fetchOnlineAnalytics = useCallback(async () => {
     const params = new URLSearchParams();
     params.set('withinMinutes', String(onlineWithin));
     params.set('role', onlineRole);
-    const res = await fetch(`${API_BASE}/admin/analytics/online?${params}`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/analytics/online?${params}`, { headers });
     if (res.ok) setOnlineAnalytics(await res.json());
-  }, [token, onlineWithin, onlineRole]);
+  }, [adminFetch, headers, onlineWithin, onlineRole]);
 
   const fetchVisits = useCallback(async () => {
     const params = new URLSearchParams();
@@ -364,9 +427,9 @@ export default function AdminPage() {
     if (visitFilters.userId.trim()) params.set('userId', visitFilters.userId.trim());
     params.set('limit', visitFilters.limit || '100');
     params.set('skip', visitFilters.skip || '0');
-    const res = await fetch(`${API_BASE}/admin/analytics/visits?${params}`, { headers });
+    const res = await adminFetch(`${API_BASE}/admin/analytics/visits?${params}`, { headers });
     if (res.ok) setVisitData(await res.json());
-  }, [token, visitFilters]);
+  }, [adminFetch, headers, visitFilters]);
 
   const fetchPpMatches = useCallback(async () => {
     const res = await fetch(`${API_BASE}/matches`);
@@ -380,8 +443,8 @@ export default function AdminPage() {
     async (matchId: string) => {
       if (!matchId) return;
       const [sRes, mRes] = await Promise.all([
-        fetch(`${API_BASE}/admin/player-props/match/${matchId}/squad`, { headers }),
-        fetch(`${API_BASE}/admin/player-props/match/${matchId}/markets`, { headers }),
+        adminFetch(`${API_BASE}/admin/player-props/match/${matchId}/squad`, { headers }),
+        adminFetch(`${API_BASE}/admin/player-props/match/${matchId}/markets`, { headers }),
       ]);
       if (sRes.ok) {
         const d = await sRes.json();
@@ -390,14 +453,18 @@ export default function AdminPage() {
       if (mRes.ok) setPpMarkets(await mRes.json());
       else setPpMarkets([]);
     },
-    [token],
+    [adminFetch, headers],
   );
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setStatsLoading(false);
+      setStatsError(null);
+      return;
+    }
     fetchStats();
     fetchUsers();
-  }, [token]);
+  }, [token, fetchStats, fetchUsers]);
 
   useEffect(() => {
     if (!token) return;
@@ -407,6 +474,7 @@ export default function AdminPage() {
     if (activeTab === 'accounts') fetchAccounts();
     if (activeTab === 'multipliers') {
       fetchBallMultipliers();
+      fetchTossBetSettings();
       fetchSimulatedCrowd();
     }
     if (activeTab === 'bonus') fetchBonusSettings();
@@ -433,6 +501,7 @@ export default function AdminPage() {
     fetchDeposits,
     fetchAccounts,
     fetchBallMultipliers,
+    fetchTossBetSettings,
     fetchSimulatedCrowd,
     fetchBonusSettings,
     fetchBrandingSettings,
@@ -447,7 +516,7 @@ export default function AdminPage() {
     const n = Number(coinRateDraft);
     if (!Number.isFinite(n) || n < 1) return showToast('Enter a valid wallet multiplier (per ₹1 paid)', 'error');
     setActionLoading('coinRate');
-    const res = await fetch(`${API_BASE}/admin/settings/coin-rate`, {
+    const res = await adminFetch(`${API_BASE}/admin/settings/coin-rate`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ coinsPerInr: n }),
@@ -473,7 +542,7 @@ export default function AdminPage() {
     }
 
     setActionLoading('ballMultipliers');
-    const res = await fetch(`${API_BASE}/admin/settings/ball-multipliers`, {
+    const res = await adminFetch(`${API_BASE}/admin/settings/ball-multipliers`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ ballMultipliers: payload }),
@@ -488,13 +557,34 @@ export default function AdminPage() {
     setActionLoading(null);
   };
 
+  const saveTossBetMultiplier = async () => {
+    const n = Number(tossBetDraft);
+    if (!Number.isFinite(n) || n < 1.01 || n > 100) {
+      return showToast('Toss multiplier must be between 1.01 and 100', 'error');
+    }
+    setActionLoading('tossBet');
+    const res = await adminFetch(`${API_BASE}/admin/settings/toss-bet`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ tossBetMultiplier: n }),
+    });
+    if (res.ok) {
+      showToast('Toss bet multiplier updated');
+      fetchTossBetSettings();
+    } else {
+      const d = await res.json();
+      showToast(d.message || 'Failed', 'error');
+    }
+    setActionLoading(null);
+  };
+
   const saveSimulatedCrowd = async () => {
     const pct = Number(simCrowdDraft.winBiasPercent);
     if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
       return showToast('Win chance must be 0–100%', 'error');
     }
     setActionLoading('simCrowd');
-    const res = await fetch(`${API_BASE}/admin/settings/simulated-crowd`, {
+    const res = await adminFetch(`${API_BASE}/admin/settings/simulated-crowd`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
@@ -514,7 +604,7 @@ export default function AdminPage() {
 
   const saveBonusSettings = async () => {
     setActionLoading('saveBonus');
-    const res = await fetch(`${API_BASE}/admin/settings/signup-bonus`, {
+    const res = await adminFetch(`${API_BASE}/admin/settings/signup-bonus`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify(bonusDraft),
@@ -531,7 +621,7 @@ export default function AdminPage() {
 
   const saveBrandingText = async () => {
     setActionLoading('branding');
-    const res = await fetch(`${API_BASE}/admin/settings/site-branding`, {
+    const res = await adminFetch(`${API_BASE}/admin/settings/site-branding`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
@@ -565,7 +655,7 @@ export default function AdminPage() {
     setActionLoading('brandingLogo');
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch(`${API_BASE}/admin/settings/site-branding/logo`, {
+    const res = await adminFetch(`${API_BASE}/admin/settings/site-branding/logo`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: fd,
@@ -597,7 +687,7 @@ export default function AdminPage() {
   const saveUser = async () => {
     if (!editingUser) return;
     setActionLoading('saveUser');
-    const res = await fetch(`${API_BASE}/admin/users/${editingUser._id}`, {
+    const res = await adminFetch(`${API_BASE}/admin/users/${editingUser._id}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
@@ -620,7 +710,7 @@ export default function AdminPage() {
 
   const approveWithdrawal = async (id: string) => {
     setActionLoading(id + '_approve');
-    const res = await fetch(`${API_BASE}/admin/withdrawals/${id}/approve`, { method: 'PATCH', headers });
+    const res = await adminFetch(`${API_BASE}/admin/withdrawals/${id}/approve`, { method: 'PATCH', headers });
     if (res.ok) {
       showToast('Withdrawal approved & user notified');
       fetchWithdrawals();
@@ -635,7 +725,7 @@ export default function AdminPage() {
   const rejectWithdrawal = async (id: string) => {
     const note = prompt('Reason for rejection (optional):') || '';
     setActionLoading(id + '_reject');
-    const res = await fetch(`${API_BASE}/admin/withdrawals/${id}/reject`, {
+    const res = await adminFetch(`${API_BASE}/admin/withdrawals/${id}/reject`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ adminNote: note }),
@@ -652,7 +742,7 @@ export default function AdminPage() {
 
   const approveDeposit = async (id: string) => {
     setActionLoading(id + '_dapprove');
-    const res = await fetch(`${API_BASE}/admin/deposits/${id}/approve`, { method: 'PATCH', headers });
+    const res = await adminFetch(`${API_BASE}/admin/deposits/${id}/approve`, { method: 'PATCH', headers });
     if (res.ok) {
       showToast('Deposit approved — wallet credited (INR)');
       fetchDeposits();
@@ -668,7 +758,7 @@ export default function AdminPage() {
   const parseBankSms = async () => {
     if (!smsPaste.trim()) return showToast('Paste a bank SMS first', 'error');
     setActionLoading('smsParse');
-    const res = await fetch(`${API_BASE}/admin/payment-sync/parse-sms`, {
+    const res = await adminFetch(`${API_BASE}/admin/payment-sync/parse-sms`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ text: smsPaste }),
@@ -685,7 +775,7 @@ export default function AdminPage() {
   const confirmDepositWithSms = async (depositId: string) => {
     if (!smsPaste.trim()) return showToast('Paste the same SMS in the box above', 'error');
     setActionLoading('smsConfirm_' + depositId);
-    const res = await fetch(`${API_BASE}/admin/payment-sync/confirm-with-sms`, {
+    const res = await adminFetch(`${API_BASE}/admin/payment-sync/confirm-with-sms`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ depositId, text: smsPaste }),
@@ -703,7 +793,7 @@ export default function AdminPage() {
   const rejectDeposit = async (id: string) => {
     const note = prompt('Reason for rejection (optional):') || '';
     setActionLoading(id + '_dreject');
-    const res = await fetch(`${API_BASE}/admin/deposits/${id}/reject`, {
+    const res = await adminFetch(`${API_BASE}/admin/deposits/${id}/reject`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ adminNote: note }),
@@ -720,13 +810,29 @@ export default function AdminPage() {
 
   const createAccount = async () => {
     setActionLoading('newAcc');
-    const res = await fetch(`${API_BASE}/admin/payment-accounts`, {
+    const qrFile = newUpiQrFile;
+    const res = await adminFetch(`${API_BASE}/admin/payment-accounts`, {
       method: 'POST',
       headers,
       body: JSON.stringify(newAccount),
     });
+    const data = (await res.json().catch(() => null)) as { _id?: string; message?: string } | null;
     if (res.ok) {
-      showToast('Payment account added');
+      const createdId = data?._id;
+      if (newAccount.kind === 'upi' && qrFile && createdId && token) {
+        const fd = new FormData();
+        fd.append('file', qrFile);
+        const upRes = await adminFetch(`${API_BASE}/admin/payment-accounts/${createdId}/upi-qr`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        const upData = (await upRes.json().catch(() => ({}))) as { message?: string };
+        if (upRes.ok) showToast('Payment account and QR code added');
+        else showToast(upData.message || 'Account added, but QR upload failed', 'warning');
+      } else {
+        showToast('Payment account added');
+      }
       setNewAccount({
         label: '',
         kind: 'upi',
@@ -737,17 +843,18 @@ export default function AdminPage() {
         accountHolderName: '',
         isPrimary: false,
       });
+      setNewUpiQrFile(null);
+      newUpiQrInputRef.current && (newUpiQrInputRef.current.value = '');
       fetchAccounts();
     } else {
-      const d = await res.json();
-      showToast(d.message || 'Failed', 'error');
+      showToast(data?.message || 'Failed', 'error');
     }
     setActionLoading(null);
   };
 
   const setPrimary = async (id: string) => {
     setActionLoading(id + '_pri');
-    const res = await fetch(`${API_BASE}/admin/payment-accounts/${id}/primary`, { method: 'POST', headers });
+    const res = await adminFetch(`${API_BASE}/admin/payment-accounts/${id}/primary`, { method: 'POST', headers });
     if (res.ok) {
       setAccounts(await res.json());
       showToast('Primary account updated');
@@ -758,7 +865,7 @@ export default function AdminPage() {
   const deleteAccount = async (id: string) => {
     if (!confirm('Delete this payment account?')) return;
     setActionLoading(id + '_del');
-    const res = await fetch(`${API_BASE}/admin/payment-accounts/${id}`, { method: 'DELETE', headers });
+    const res = await adminFetch(`${API_BASE}/admin/payment-accounts/${id}`, { method: 'DELETE', headers });
     if (res.ok) {
       showToast('Account removed');
       fetchAccounts();
@@ -775,7 +882,7 @@ export default function AdminPage() {
       return showToast('Enter an amount to add or a new total', 'error');
     }
     setActionLoading('sync');
-    const res = await fetch(`${API_BASE}/admin/payment-accounts/${syncForm.id}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
+    const res = await adminFetch(`${API_BASE}/admin/payment-accounts/${syncForm.id}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
     if (res.ok) {
       showToast('Receipt totals updated');
       setSyncForm(null);
@@ -789,7 +896,7 @@ export default function AdminPage() {
 
   const resyncMatchFeed = async () => {
     setActionLoading('matchResync');
-    const res = await fetch(`${API_BASE}/admin/matches/resync-feed`, { method: 'POST', headers });
+    const res = await adminFetch(`${API_BASE}/admin/matches/resync-feed`, { method: 'POST', headers });
     const d = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
     setActionLoading(null);
     if (res.ok && d.ok) showToast(d.message || 'Matches synced');
@@ -803,7 +910,7 @@ export default function AdminPage() {
     setActionLoading('upiqr_' + accountId);
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch(`${API_BASE}/admin/payment-accounts/${accountId}/upi-qr`, {
+    const res = await adminFetch(`${API_BASE}/admin/payment-accounts/${accountId}/upi-qr`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: fd,
@@ -819,7 +926,7 @@ export default function AdminPage() {
   const sendNotification = async () => {
     if (!notifyForm.title || !notifyForm.message) return showToast('Fill in title and message', 'error');
     setActionLoading('notify');
-    const res = await fetch(`${API_BASE}/admin/notify`, {
+    const res = await adminFetch(`${API_BASE}/admin/notify`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -978,49 +1085,71 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {activeTab === 'overview' && stats && (
+        {activeTab === 'overview' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {[
-                { label: 'Total Users', value: stats.totalUsers, icon: '👤', color: 'from-blue-600 to-indigo-600' },
-                { label: 'Pending deposits', value: stats.pendingDeposits, icon: '⏳', color: 'from-amber-600 to-orange-600' },
-                { label: 'Pending Withdrawals', value: stats.pendingWithdrawals, icon: '⏳', color: 'from-yellow-600 to-orange-600' },
-                { label: 'Total Withdrawals', value: stats.totalWithdrawals, icon: '💸', color: 'from-purple-600 to-pink-600' },
-                {
-                  label: 'Wallet total (INR units)',
-                  value: formatInr(stats.totalCoinsInCirculation),
-                  icon: '₹',
-                  color: 'from-yellow-500 to-amber-500',
-                },
-                { label: 'Total Wins', value: stats.totalWins, icon: '✅', color: 'from-emerald-600 to-teal-600' },
-                { label: 'Total Losses', value: stats.totalLosses, icon: '❌', color: 'from-red-600 to-rose-600' },
-              ].map((s) => (
-                <div key={s.label} className={`bg-gradient-to-br ${s.color} p-6 rounded-2xl shadow-xl`}>
-                  <div className="text-3xl mb-2">{s.icon}</div>
-                  <p className="text-white/70 text-sm font-medium mb-1">{s.label}</p>
-                  <p className="text-3xl font-black text-white">{s.value}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h3 className="font-bold text-lg">Resync live &amp; upcoming matches</h3>
-                <p className="text-sm text-gray-400 mt-1 max-w-xl">
-                  Runs the same feed pull as the background job (CricAPI when enabled, otherwise the live-scores scraper). Use this if fixtures or scores look stuck.
-                </p>
+            {statsLoading && (
+              <div className="rounded-2xl border border-gray-700/50 bg-gray-800/40 py-16 text-center text-gray-400">
+                Loading overview…
               </div>
-              <button
-                type="button"
-                onClick={resyncMatchFeed}
-                disabled={!!actionLoading}
-                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold disabled:opacity-50 shrink-0"
-              >
-                {actionLoading === 'matchResync' ? 'Syncing…' : '↻ Resync now'}
-              </button>
-            </div>
+            )}
+            {statsError && !statsLoading && (
+              <div className="rounded-2xl border border-red-500/40 bg-red-950/30 p-8 text-center">
+                <p className="text-red-200 font-semibold mb-1">Overview could not be loaded</p>
+                <p className="text-sm text-red-300/90 mb-4">{statsError}</p>
+                <button
+                  type="button"
+                  onClick={() => void fetchStats()}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-white"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            {stats && !statsLoading && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {[
+                    { label: 'Total Users', value: stats.totalUsers, icon: '👤', color: 'from-blue-600 to-indigo-600' },
+                    { label: 'Pending deposits', value: stats.pendingDeposits, icon: '⏳', color: 'from-amber-600 to-orange-600' },
+                    { label: 'Pending Withdrawals', value: stats.pendingWithdrawals, icon: '⏳', color: 'from-yellow-600 to-orange-600' },
+                    { label: 'Total Withdrawals', value: stats.totalWithdrawals, icon: '💸', color: 'from-purple-600 to-pink-600' },
+                    {
+                      label: 'Wallet total (INR units)',
+                      value: formatInr(stats.totalCoinsInCirculation),
+                      icon: '₹',
+                      color: 'from-yellow-500 to-amber-500',
+                    },
+                    { label: 'Total Wins', value: stats.totalWins, icon: '✅', color: 'from-emerald-600 to-teal-600' },
+                    { label: 'Total Losses', value: stats.totalLosses, icon: '❌', color: 'from-red-600 to-rose-600' },
+                  ].map((s) => (
+                    <div key={s.label} className={`bg-gradient-to-br ${s.color} p-6 rounded-2xl shadow-xl`}>
+                      <div className="text-3xl mb-2">{s.icon}</div>
+                      <p className="text-white/70 text-sm font-medium mb-1">{s.label}</p>
+                      <p className="text-3xl font-black text-white">{s.value}</p>
+                    </div>
+                  ))}
+                </div>
 
-            {betOutcomeStats && (
+                <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <h3 className="font-bold text-lg">Resync live &amp; upcoming matches</h3>
+                    <p className="text-sm text-gray-400 mt-1 max-w-xl">
+                      Runs the same feed pull as the background job (CricAPI when enabled, otherwise the live-scores scraper). Use this if fixtures or scores look stuck.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={resyncMatchFeed}
+                    disabled={!!actionLoading}
+                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold disabled:opacity-50 shrink-0"
+                  >
+                    {actionLoading === 'matchResync' ? 'Syncing…' : '↻ Resync now'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {!statsLoading && betOutcomeStats && (
               <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 overflow-hidden">
                 <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
                   <div>
@@ -1096,7 +1225,7 @@ export default function AdminPage() {
               </div>
             )}
 
-            {matchBetting && matchBetting.length > 0 && (
+            {!statsLoading && matchBetting && matchBetting.length > 0 && (
               <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 overflow-hidden">
                 <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
                   <div>
@@ -1149,32 +1278,34 @@ export default function AdminPage() {
               </div>
             )}
 
-            <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 max-w-xl">
-              <h3 className="font-bold text-lg mb-1">Deposit → wallet credit</h3>
-              <p className="text-sm text-gray-400 mb-4">
-                Multiplier of wallet balance (shown as INR) credited per ₹1 deposited. Example: 10 means ₹100 paid → ₹1,000 wallet credit after approval.
-              </p>
-              <div className="flex gap-3 flex-wrap items-end">
-                <div>
-                  <label className="text-xs text-gray-500">Wallet units per ₹1 paid</label>
-                  <input
-                    type="number"
-                    min={1}
-                    className="block mt-1 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 w-40 text-white"
-                    value={coinRateDraft}
-                    onChange={(e) => setCoinRateDraft(e.target.value)}
-                  />
+            {!statsLoading && (
+              <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 max-w-xl">
+                <h3 className="font-bold text-lg mb-1">Deposit → wallet credit</h3>
+                <p className="text-sm text-gray-400 mb-4">
+                  Multiplier of wallet balance (shown as INR) credited per ₹1 deposited. Example: 10 means ₹100 paid → ₹1,000 wallet credit after approval.
+                </p>
+                <div className="flex gap-3 flex-wrap items-end">
+                  <div>
+                    <label className="text-xs text-gray-500">Wallet units per ₹1 paid</label>
+                    <input
+                      type="number"
+                      min={1}
+                      className="block mt-1 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 w-40 text-white"
+                      value={coinRateDraft}
+                      onChange={(e) => setCoinRateDraft(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={actionLoading === 'coinRate'}
+                    onClick={saveCoinRate}
+                    className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold disabled:opacity-50"
+                  >
+                    {actionLoading === 'coinRate' ? '...' : 'Save rate'}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  disabled={actionLoading === 'coinRate'}
-                  onClick={saveCoinRate}
-                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold disabled:opacity-50"
-                >
-                  {actionLoading === 'coinRate' ? '...' : 'Save rate'}
-                </button>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -1535,18 +1666,53 @@ export default function AdminPage() {
                 <select
                   className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2"
                   value={newAccount.kind}
-                  onChange={(e) => setNewAccount((a) => ({ ...a, kind: e.target.value as 'upi' | 'bank' }))}
+                  onChange={(e) => {
+                    const kind = e.target.value as 'upi' | 'bank';
+                    setNewAccount((a) => ({ ...a, kind }));
+                    if (kind !== 'upi') {
+                      setNewUpiQrFile(null);
+                      if (newUpiQrInputRef.current) newUpiQrInputRef.current.value = '';
+                    }
+                  }}
                 >
                   <option value="upi">UPI</option>
                   <option value="bank">Bank</option>
                 </select>
                 {newAccount.kind === 'upi' ? (
-                  <input
-                    className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 md:col-span-2"
-                    placeholder="UPI ID"
-                    value={newAccount.upiId}
-                    onChange={(e) => setNewAccount((a) => ({ ...a, upiId: e.target.value }))}
-                  />
+                  <>
+                    <input
+                      className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 md:col-span-2"
+                      placeholder="UPI ID"
+                      value={newAccount.upiId}
+                      onChange={(e) => setNewAccount((a) => ({ ...a, upiId: e.target.value }))}
+                    />
+                    <div className="md:col-span-2 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-gray-700/80 bg-gray-900/40 px-3 py-3">
+                      <label className="inline-flex items-center gap-2 text-sm text-gray-300 cursor-pointer shrink-0">
+                        <input
+                          ref={newUpiQrInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          className="hidden"
+                          disabled={!!actionLoading}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] ?? null;
+                            setNewUpiQrFile(f);
+                          }}
+                        />
+                        <span className="px-3 py-2 rounded-lg bg-indigo-600/50 hover:bg-indigo-600/70 font-semibold text-white text-xs">
+                          {newUpiQrFile ? 'Change QR image' : 'Upload payee QR (optional)'}
+                        </span>
+                      </label>
+                      {newUpiQrFile && (
+                        <span className="text-xs text-gray-400 truncate" title={newUpiQrFile.name}>
+                          {newUpiQrFile.name}
+                        </span>
+                      )}
+                      <p className="text-xs text-gray-500 sm:ml-auto">
+                        PNG, JPEG, WebP, or GIF · max 2 MB · shown on wallet deposit
+                      </p>
+                    </div>
+                  </>
                 ) : (
                   <>
                     <input
@@ -1593,7 +1759,7 @@ export default function AdminPage() {
                 {actionLoading === 'newAcc' ? '...' : 'Add account'}
               </button>
               <p className="text-xs text-gray-500 mt-3">
-                For UPI accounts: after adding, use <strong>Upload / replace QR</strong> in the list below to attach a payee QR image (shown with the UPI ID on the wallet deposit screen).
+                For UPI accounts you can attach a payee QR when adding the account, or later with <strong>Upload / replace QR</strong> in the list (shown with the UPI ID on the wallet deposit screen).
               </p>
             </div>
 
@@ -1678,11 +1844,40 @@ export default function AdminPage() {
                 type="button"
                 onClick={() => {
                   fetchBallMultipliers();
+                  fetchTossBetSettings();
                   fetchSimulatedCrowd();
                 }}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm transition"
               >
                 ↻ Refresh
+              </button>
+            </div>
+
+            <div className="bg-gray-800/60 border border-emerald-700/35 rounded-2xl p-8 space-y-5">
+              <h3 className="text-lg font-bold text-white">Toss betting</h3>
+              <p className="text-sm text-gray-400">
+                Single fixed multiplier for both teams on <code className="text-gray-300">type: &apos;toss&apos;</code> bets.
+                Users keep this multiplier when they place a bet (shown on the match page until toss is recorded).
+              </p>
+              <div>
+                <label className="block text-xs text-gray-500 mb-2">Toss multiplier (×)</label>
+                <input
+                  type="number"
+                  min={1.01}
+                  max={100}
+                  step={0.1}
+                  className="w-full max-w-xs bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 text-white"
+                  value={tossBetDraft}
+                  onChange={(e) => setTossBetDraft(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                disabled={actionLoading === 'tossBet'}
+                onClick={saveTossBetMultiplier}
+                className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold disabled:opacity-50"
+              >
+                {actionLoading === 'tossBet' ? 'Saving…' : 'Save toss multiplier'}
               </button>
             </div>
 
@@ -1999,7 +2194,7 @@ export default function AdminPage() {
                     disabled={!!actionLoading}
                     onClick={async () => {
                       setActionLoading('ppSync');
-                      const res = await fetch(`${API_BASE}/admin/player-props/match/${ppMatchId}/squad/sync`, {
+                      const res = await adminFetch(`${API_BASE}/admin/player-props/match/${ppMatchId}/squad/sync`, {
                         method: 'POST',
                         headers,
                       });
@@ -2079,7 +2274,7 @@ export default function AdminPage() {
                       disabled={!!actionLoading}
                       onClick={async () => {
                         setActionLoading('ppAddP');
-                        const res = await fetch(`${API_BASE}/admin/player-props/match/${ppMatchId}/squad/player`, {
+                        const res = await adminFetch(`${API_BASE}/admin/player-props/match/${ppMatchId}/squad/player`, {
                           method: 'POST',
                           headers,
                           body: JSON.stringify(ppManual),
@@ -2173,7 +2368,7 @@ export default function AdminPage() {
                     if (ppForm.playerImageUrl.trim()) {
                       payload.playerImageUrl = ppForm.playerImageUrl.trim();
                     }
-                    const res = await fetch(`${API_BASE}/admin/player-props/match/${ppMatchId}/markets`, {
+                    const res = await adminFetch(`${API_BASE}/admin/player-props/match/${ppMatchId}/markets`, {
                       method: 'POST',
                       headers,
                       body: JSON.stringify(payload),
@@ -2227,6 +2422,7 @@ export default function AdminPage() {
                               marketId={m.id}
                               initialUrl={m.playerImageUrl ?? ''}
                               headers={headers}
+                              adminFetch={adminFetch}
                               onSaved={(rows) =>
                                 setPpMarkets(rows as Array<{
                                   id: string;
@@ -2256,7 +2452,7 @@ export default function AdminPage() {
                           <button
                             type="button"
                             onClick={async () => {
-                              const res = await fetch(`${API_BASE}/admin/player-props/markets/${m.id}`, {
+                              const res = await adminFetch(`${API_BASE}/admin/player-props/markets/${m.id}`, {
                                 method: 'PATCH',
                                 headers,
                                 body: JSON.stringify({ isPublished: !m.isPublished }),
@@ -2277,7 +2473,7 @@ export default function AdminPage() {
                             type="button"
                             onClick={async () => {
                               if (!confirm('Delete this market?')) return;
-                              const res = await fetch(`${API_BASE}/admin/player-props/markets/${m.id}`, {
+                              const res = await adminFetch(`${API_BASE}/admin/player-props/markets/${m.id}`, {
                                 method: 'DELETE',
                                 headers,
                               });
