@@ -45,6 +45,32 @@ type SchedulePayload = {
   }>;
 };
 
+type PrematchOddsPayload = {
+  betting?: {
+    toss?: { open: boolean; multiplier: number };
+    teamVsTeam?: {
+      open: boolean;
+      multiplierA: number;
+      multiplierB: number;
+    };
+    matchWinner?: {
+      open: boolean;
+      multiplierA: number;
+      multiplierB: number;
+    };
+  };
+};
+
+type PlayerPropHomeItem = {
+  matchId: string;
+  bettingOpen: boolean;
+  market: {
+    id: string;
+    label: string;
+    multiplier: number;
+  };
+};
+
 export default function MatchPage() {
   const params = useParams();
   const matchId = params.id as string;
@@ -57,7 +83,12 @@ export default function MatchPage() {
   const { liveMatch, user, token, setLiveMatch, updateCoins, addNotification } = useStore();
   /** Raw string so users can clear/replace digits; clamp only on blur / place bet (avoid 10→1010 bugs). */
   const [stakeInput, setStakeInput] = useState(String(MIN_STAKE_COINS));
-  const [activeTab, setActiveTab] = useState<'ball' | 'over'>('ball');
+  const [activeTab, setActiveTab] = useState<'ball' | 'prematch' | 'over'>('ball');
+  const [prematchOdds, setPrematchOdds] = useState<PrematchOddsPayload | null>(null);
+  const [prematchBusy, setPrematchBusy] = useState<string | null>(null);
+  const [tossBetPlaced, setTossBetPlaced] = useState(false);
+  const [riskMatchBetsToday, setRiskMatchBetsToday] = useState(0);
+  const [playerPropItems, setPlayerPropItems] = useState<PlayerPropHomeItem[]>([]);
   const [gameMultipliers, setGameMultipliers] = useState<{
     ballMultipliers: Record<string, number>;
     nonBallMultiplierRange: { min: number; max: number };
@@ -119,6 +150,56 @@ export default function MatchPage() {
       })
       .catch(() => {});
   }, [matchId]);
+
+  useEffect(() => {
+    if (!matchId) return;
+    fetch(`${API_BASE}/predictions/match/${matchId}/outcome-odds`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: PrematchOddsPayload | null) => setPrematchOdds(data))
+      .catch(() => setPrematchOdds(null));
+  }, [matchId]);
+
+  useEffect(() => {
+    if (!matchId) return;
+    fetch(`${API_BASE}/player-props/home`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { items?: PlayerPropHomeItem[] } | null) => {
+        const all = Array.isArray(data?.items) ? data!.items : [];
+        setPlayerPropItems(all.filter((row) => String(row.matchId) === String(matchId)).slice(0, 3));
+      })
+      .catch(() => setPlayerPropItems([]));
+  }, [matchId]);
+
+  useEffect(() => {
+    if (!token || !matchId) {
+      setTossBetPlaced(false);
+      setRiskMatchBetsToday(0);
+      return;
+    }
+    fetch(`${API_BASE}/predictions/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows: Array<{ type?: string; matchId?: string; createdAt?: string }> | null) => {
+        const placed = (rows ?? []).some(
+          (row) => row?.type === 'toss' && String(row?.matchId) === String(matchId),
+        );
+        setTossBetPlaced(placed);
+        const dayStart = new Date();
+        dayStart.setHours(0, 0, 0, 0);
+        const riskCount = (rows ?? []).filter((row) => {
+          if (row?.type !== 'team_vs_team') return false;
+          if (String(row?.matchId) !== String(matchId)) return false;
+          const createdAt = row?.createdAt ? new Date(row.createdAt).getTime() : 0;
+          return Number.isFinite(createdAt) && createdAt >= dayStart.getTime();
+        }).length;
+        setRiskMatchBetsToday(riskCount);
+      })
+      .catch(() => {
+        setTossBetPlaced(false);
+        setRiskMatchBetsToday(0);
+      });
+  }, [token, matchId]);
 
   useEffect(() => {
     fetch(`${API_BASE}/matches/schedule`)
@@ -188,6 +269,76 @@ export default function MatchPage() {
       alert(
         'Could not reach the server. Check your connection and that the API is running, then try again.',
       );
+    }
+  };
+
+  const placeOutcomeBet = async (kind: 'toss' | 'team_vs_team' | 'match_winner', side: 'A' | 'B') => {
+    if (!token) return alert('Please log in to place a bet.');
+    const stake = clampStakeAmount(Number(stakeInput) || 0);
+    setStakeInput(String(stake));
+    setPrematchBusy(`${kind}-${side}`);
+    try {
+      const res = await fetch(`${API_BASE}/predictions/outcome-bet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ matchId, kind, side, amountStaked: stake }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && typeof data.coinsBalance === 'number') {
+        updateCoins(data.coinsBalance);
+        if (kind === 'toss') setTossBetPlaced(true);
+        const marketLabel =
+          kind === 'toss'
+            ? 'Toss'
+            : kind === 'team_vs_team'
+              ? 'Team vs Team'
+              : 'Favourite team';
+        const msg = `You placed your bet: ${formatInr(stake)} on ${marketLabel}`;
+        setToastMsg(msg);
+        setBetPlacedPopup(msg);
+        if (kind === 'team_vs_team') {
+          setRiskMatchBetsToday((n) => Math.min(3, n + 1));
+        }
+      } else {
+        alert(data?.message || 'Failed to place pre-match bet.');
+      }
+    } catch {
+      alert('Could not reach the server. Please try again.');
+    } finally {
+      setPrematchBusy(null);
+    }
+  };
+
+  const placePlayerPropBet = async (marketId: string, label: string) => {
+    if (!token) return alert('Please log in to place a bet.');
+    const stake = clampStakeAmount(Number(stakeInput) || 0);
+    setStakeInput(String(stake));
+    setPrematchBusy(`prop-${marketId}`);
+    try {
+      const res = await fetch(`${API_BASE}/player-props/bet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ marketId, amountStaked: stake }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && typeof data.coinsBalance === 'number') {
+        updateCoins(data.coinsBalance);
+        const msg = `You placed your player prop bet: ${formatInr(stake)} on "${label}"`;
+        setToastMsg(msg);
+        setBetPlacedPopup(msg);
+      } else {
+        alert(data?.message || 'Failed to place player prop bet.');
+      }
+    } catch {
+      alert('Could not reach the server. Please try again.');
+    } finally {
+      setPrematchBusy(null);
     }
   };
 
@@ -688,6 +839,9 @@ export default function MatchPage() {
                  <button type="button" onClick={() => setActiveTab('ball')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg inline-flex items-center justify-center gap-1.5 ${activeTab === 'ball' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>
                    Ball
                  </button>
+                 <button type="button" onClick={() => setActiveTab('prematch')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg inline-flex items-center justify-center gap-1.5 ${activeTab === 'prematch' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>
+                   Prematch
+                 </button>
                  <button type="button" onClick={() => setActiveTab('over')} className={`flex-1 min-w-[5.5rem] sm:flex-none px-3 sm:px-4 py-2 text-sm sm:text-base font-bold transition rounded-lg inline-flex items-center justify-center gap-1.5 ${activeTab === 'over' ? 'bg-indigo-600 text-white' : 'text-gray-400 bg-gray-700/30 hover:bg-gray-700 hover:text-white'}`}>
                    Over
                    <span className="text-[10px] font-black uppercase tracking-wide bg-white/15 px-1.5 py-0.5 rounded">Soon</span>
@@ -829,6 +983,150 @@ export default function MatchPage() {
                   <p className="text-sm text-gray-400 max-w-md mx-auto">
                     Totals, maidens, and wicket-in-over props will launch here after settlement logic is wired to live overs.
                   </p>
+                </div>
+              )}
+
+              {activeTab === 'prematch' && (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-cyan-500/25 bg-cyan-950/20 p-4">
+                    <p className="text-sm font-black text-cyan-200 mb-1">Toss betting</p>
+                    {tossBetPlaced ? (
+                      <p className="text-sm text-emerald-200 font-semibold">You have placed bet on toss.</p>
+                    ) : (
+                      <p className="text-xs text-gray-400 mb-3">
+                        You can bet on toss only one time.
+                      </p>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={tossBetPlaced || prematchBusy != null || displayMatch.status !== 'upcoming'}
+                        onClick={() => placeOutcomeBet('toss', 'A')}
+                        className="rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 disabled:pointer-events-none"
+                      >
+                        {prematchBusy === 'toss-A'
+                          ? 'Placing...'
+                          : `${displayMatch.teamA} · ${formatMultiplierLabel(
+                              prematchOdds?.betting?.toss?.multiplier,
+                            )}`}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={tossBetPlaced || prematchBusy != null || displayMatch.status !== 'upcoming'}
+                        onClick={() => placeOutcomeBet('toss', 'B')}
+                        className="rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 disabled:pointer-events-none"
+                      >
+                        {prematchBusy === 'toss-B'
+                          ? 'Placing...'
+                          : `${displayMatch.teamB} · ${formatMultiplierLabel(
+                              prematchOdds?.betting?.toss?.multiplier,
+                            )}`}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-indigo-500/25 bg-indigo-950/20 p-4">
+                    <p className="text-sm font-black text-indigo-200 mb-1">Favourite team (pre-match)</p>
+                    <p className="text-xs text-gray-400 mb-3">Choose your favourite before match starts.</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={prematchBusy != null || displayMatch.status !== 'upcoming'}
+                        onClick={() => placeOutcomeBet('match_winner', 'A')}
+                        className="rounded-xl bg-indigo-900/50 hover:bg-indigo-800/60 border border-indigo-600/50 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 disabled:pointer-events-none"
+                      >
+                        {prematchBusy === 'match_winner-A'
+                          ? 'Placing...'
+                          : `${displayMatch.teamA} · ${formatMultiplierLabel(
+                              prematchOdds?.betting?.matchWinner?.multiplierA,
+                            )}`}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={prematchBusy != null || displayMatch.status !== 'upcoming'}
+                        onClick={() => placeOutcomeBet('match_winner', 'B')}
+                        className="rounded-xl bg-indigo-900/50 hover:bg-indigo-800/60 border border-indigo-600/50 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 disabled:pointer-events-none"
+                      >
+                        {prematchBusy === 'match_winner-B'
+                          ? 'Placing...'
+                          : `${displayMatch.teamB} · ${formatMultiplierLabel(
+                              prematchOdds?.betting?.matchWinner?.multiplierB,
+                            )}`}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-violet-500/25 bg-violet-950/20 p-4">
+                    <p className="text-sm font-black text-violet-200 mb-1">Risk Match vs Match</p>
+                    {riskMatchBetsToday >= 3 ? (
+                      <p className="text-xs text-emerald-200 font-semibold mb-3">
+                        You have done for today on this.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-400 mb-3">
+                        Multiplier is controlled from admin panel. You can bet 3 times per day on this market.
+                      </p>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={prematchBusy != null || displayMatch.status !== 'upcoming' || riskMatchBetsToday >= 3}
+                        onClick={() => placeOutcomeBet('team_vs_team', 'A')}
+                        className="rounded-xl bg-violet-900/50 hover:bg-violet-800/60 border border-violet-600/50 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 disabled:pointer-events-none"
+                      >
+                        {prematchBusy === 'team_vs_team-A'
+                          ? 'Placing...'
+                          : `${displayMatch.teamA} · ${formatMultiplierLabel(
+                              prematchOdds?.betting?.teamVsTeam?.multiplierA,
+                            )}`}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={prematchBusy != null || displayMatch.status !== 'upcoming' || riskMatchBetsToday >= 3}
+                        onClick={() => placeOutcomeBet('team_vs_team', 'B')}
+                        className="rounded-xl bg-violet-900/50 hover:bg-violet-800/60 border border-violet-600/50 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 disabled:pointer-events-none"
+                      >
+                        {prematchBusy === 'team_vs_team-B'
+                          ? 'Placing...'
+                          : `${displayMatch.teamB} · ${formatMultiplierLabel(
+                              prematchOdds?.betting?.teamVsTeam?.multiplierB,
+                            )}`}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-violet-200/80 mt-2">
+                      Attempts used today: {riskMatchBetsToday}/3
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-500/25 bg-emerald-950/20 p-4">
+                    <p className="text-sm font-black text-emerald-200 mb-1">Player prop favourites</p>
+                    {playerPropItems.length === 0 ? (
+                      <p className="text-xs text-gray-400">
+                        No player prop market available for this match yet. You can also check{' '}
+                        <Link href="/dashboard" className="text-indigo-300 hover:underline">Dashboard</Link>.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {playerPropItems.map((row) => (
+                          <button
+                            key={row.market.id}
+                            type="button"
+                            disabled={prematchBusy != null || !row.bettingOpen}
+                            onClick={() => placePlayerPropBet(row.market.id, row.market.label)}
+                            className="w-full rounded-xl bg-emerald-900/40 hover:bg-emerald-800/50 border border-emerald-600/40 px-3 py-2.5 text-left text-sm text-white disabled:opacity-40 disabled:pointer-events-none"
+                          >
+                            <span className="font-semibold">{row.market.label}</span>
+                            <span className="ml-2 text-amber-200 font-mono">
+                              {formatMultiplierLabel(row.market.multiplier)}
+                            </span>
+                            {prematchBusy === `prop-${row.market.id}` && (
+                              <span className="ml-2 text-xs text-gray-300">Placing...</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

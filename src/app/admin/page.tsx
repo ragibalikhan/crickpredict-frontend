@@ -139,6 +139,7 @@ export default function AdminPage() {
     Extras: '2.0',
   });
   const [tossBetDraft, setTossBetDraft] = useState('1.8');
+  const [teamVsTeamBetDraft, setTeamVsTeamBetDraft] = useState('2');
   const [simCrowdDraft, setSimCrowdDraft] = useState({ enabled: false, winBiasPercent: 80 });
   const [bonusSettings, setBonusSettings] = useState({
     signupBonusAmount: 50,
@@ -336,6 +337,16 @@ export default function AdminPage() {
     );
   }, [adminFetch, headers]);
 
+  const fetchTeamVsTeamBetSettings = useCallback(async () => {
+    const res = await adminFetch(`${API_BASE}/admin/settings/team-vs-team-bet`, { headers });
+    if (!res.ok) return;
+    const d = await res.json();
+    const m = d.teamVsTeamBetMultiplier;
+    setTeamVsTeamBetDraft(
+      typeof m === 'number' && Number.isFinite(m) ? String(m) : '2',
+    );
+  }, [adminFetch, headers]);
+
   const fetchSimulatedCrowd = useCallback(async () => {
     const res = await adminFetch(`${API_BASE}/admin/settings/simulated-crowd`, { headers });
     if (!res.ok) return;
@@ -475,6 +486,7 @@ export default function AdminPage() {
     if (activeTab === 'multipliers') {
       fetchBallMultipliers();
       fetchTossBetSettings();
+      fetchTeamVsTeamBetSettings();
       fetchSimulatedCrowd();
     }
     if (activeTab === 'bonus') fetchBonusSettings();
@@ -502,6 +514,7 @@ export default function AdminPage() {
     fetchAccounts,
     fetchBallMultipliers,
     fetchTossBetSettings,
+    fetchTeamVsTeamBetSettings,
     fetchSimulatedCrowd,
     fetchBonusSettings,
     fetchBrandingSettings,
@@ -571,6 +584,27 @@ export default function AdminPage() {
     if (res.ok) {
       showToast('Toss bet multiplier updated');
       fetchTossBetSettings();
+    } else {
+      const d = await res.json();
+      showToast(d.message || 'Failed', 'error');
+    }
+    setActionLoading(null);
+  };
+
+  const saveTeamVsTeamBetMultiplier = async () => {
+    const n = Number(teamVsTeamBetDraft);
+    if (!Number.isFinite(n) || n < 1.01 || n > 100) {
+      return showToast('Risk Match vs Match multiplier must be between 1.01 and 100', 'error');
+    }
+    setActionLoading('teamVsTeamBet');
+    const res = await adminFetch(`${API_BASE}/admin/settings/team-vs-team-bet`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ teamVsTeamBetMultiplier: n }),
+    });
+    if (res.ok) {
+      showToast('Risk Match vs Match multiplier updated');
+      fetchTeamVsTeamBetSettings();
     } else {
       const d = await res.json();
       showToast(d.message || 'Failed', 'error');
@@ -1845,6 +1879,7 @@ export default function AdminPage() {
                 onClick={() => {
                   fetchBallMultipliers();
                   fetchTossBetSettings();
+                  fetchTeamVsTeamBetSettings();
                   fetchSimulatedCrowd();
                 }}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm transition"
@@ -1878,6 +1913,34 @@ export default function AdminPage() {
                 className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold disabled:opacity-50"
               >
                 {actionLoading === 'tossBet' ? 'Saving…' : 'Save toss multiplier'}
+              </button>
+            </div>
+
+            <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-8 space-y-5">
+              <h3 className="text-lg font-bold text-white">Risk Match vs Match (pre-match)</h3>
+              <p className="text-sm text-gray-400">
+                Fixed multiplier for both teams on <code className="text-gray-300">type: &apos;team_vs_team&apos;</code> bets.
+                This controls the Risk Match vs Match market shown in the pre-match tab.
+              </p>
+              <div>
+                <label className="block text-xs text-gray-500 mb-2">Risk Match vs Match multiplier (×)</label>
+                <input
+                  type="number"
+                  min={1.01}
+                  max={100}
+                  step={0.1}
+                  className="w-full max-w-xs bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 text-white"
+                  value={teamVsTeamBetDraft}
+                  onChange={(e) => setTeamVsTeamBetDraft(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                disabled={actionLoading === 'teamVsTeamBet'}
+                onClick={saveTeamVsTeamBetMultiplier}
+                className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold disabled:opacity-50"
+              >
+                {actionLoading === 'teamVsTeamBet' ? 'Saving…' : 'Save Risk Match vs Match multiplier'}
               </button>
             </div>
 
