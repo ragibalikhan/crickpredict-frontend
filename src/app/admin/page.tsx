@@ -109,6 +109,16 @@ export default function AdminPage() {
       totalWonPayout: number;
     }>
   | null>(null);
+  const [tossAdminMatches, setTossAdminMatches] = useState<
+    Array<{
+      _id: string;
+      teamA: string;
+      teamB: string;
+      status?: string;
+      tossWinnerSide?: 'A' | 'B';
+    }>
+  >([]);
+  const [tossDraftByMatchId, setTossDraftByMatchId] = useState<Record<string, '' | 'A' | 'B'>>({});
   const [betOutcomeStats, setBetOutcomeStats] = useState<{
     outcomes: Array<{
       predictionValue: string;
@@ -139,6 +149,7 @@ export default function AdminPage() {
     Extras: '2.0',
   });
   const [tossBetDraft, setTossBetDraft] = useState('1.8');
+  const [favouriteTeamBetDraft, setFavouriteTeamBetDraft] = useState('2');
   const [teamVsTeamBetDraft, setTeamVsTeamBetDraft] = useState('2');
   const [teamVsTeamProbDraft, setTeamVsTeamProbDraft] = useState('50');
   const [simCrowdDraft, setSimCrowdDraft] = useState({ enabled: false, winBiasPercent: 80 });
@@ -203,8 +214,10 @@ export default function AdminPage() {
     statType: 'runs' as 'runs' | 'wickets',
     condition: 'more_than' as 'more_than' | 'less_than',
     threshold: '20',
+    oppositeThreshold: '20',
     multiplier: '5',
     isPublished: false,
+    createOppositeOption: true,
     playerImageUrl: '',
   });
   const [ppManual, setPpManual] = useState({
@@ -212,6 +225,29 @@ export default function AdminPage() {
     name: '',
     role: 'batsman' as 'batsman' | 'bowler' | 'keeper_batsman' | 'all_rounder',
   });
+
+  const [ppSettlementStatus, setPpSettlementStatus] = useState<{
+    pendingMatches: number;
+    items: Array<{
+      matchId: string;
+      teamLabel: string;
+      matchStatus: string;
+      pendingBets: number;
+      attemptCount: number;
+      nextRetryAt: string | null;
+      lastError?: string;
+      lastResult?: { settled: number; skipped: number; unresolvedLines: number };
+    }>;
+  } | null>(null);
+  const [ppSettlementAudit, setPpSettlementAudit] = useState<
+    Array<{
+      id: string;
+      kind: string;
+      matchId: string | null;
+      details: Record<string, unknown>;
+      createdAt?: string;
+    }>
+  >([]);
 
   const ppTeamOptions = useMemo(() => {
     const set = new Set<string>();
@@ -350,6 +386,16 @@ export default function AdminPage() {
     );
   }, [adminFetch, headers]);
 
+  const fetchFavouriteTeamBetSettings = useCallback(async () => {
+    const res = await adminFetch(`${API_BASE}/admin/settings/favourite-team-bet`, { headers });
+    if (!res.ok) return;
+    const d = await res.json();
+    const m = d.favouriteTeamBetMultiplier;
+    setFavouriteTeamBetDraft(
+      typeof m === 'number' && Number.isFinite(m) ? String(m) : '2',
+    );
+  }, [adminFetch, headers]);
+
   const fetchTeamVsTeamBetSettings = useCallback(async () => {
     const res = await adminFetch(`${API_BASE}/admin/settings/team-vs-team-bet`, { headers });
     if (!res.ok) return;
@@ -465,6 +511,36 @@ export default function AdminPage() {
     }
   }, []);
 
+  const fetchTossAdminMatches = useCallback(async () => {
+    const res = await fetch(`${API_BASE}/matches`);
+    if (!res.ok) return;
+    const data = (await res.json().catch(() => [])) as Array<{
+      _id?: string;
+      teamA?: string;
+      teamB?: string;
+      status?: string;
+      tossWinnerSide?: 'A' | 'B';
+    }>;
+    const rows = (Array.isArray(data) ? data : [])
+      .filter((m) => m._id && m.teamA && m.teamB)
+      .slice(0, 20)
+      .map((m) => ({
+        _id: String(m._id),
+        teamA: String(m.teamA),
+        teamB: String(m.teamB),
+        status: m.status,
+        tossWinnerSide: m.tossWinnerSide,
+      }));
+    setTossAdminMatches(rows);
+    setTossDraftByMatchId((prev) => {
+      const next = { ...prev };
+      for (const row of rows) {
+        if (!(row._id in next)) next[row._id] = row.tossWinnerSide ?? '';
+      }
+      return next;
+    });
+  }, []);
+
   const loadPlayerPropsDetail = useCallback(
     async (matchId: string) => {
       if (!matchId) return;
@@ -481,6 +557,22 @@ export default function AdminPage() {
     },
     [adminFetch, headers],
   );
+
+  const fetchPpSettlementHealth = useCallback(async () => {
+    const [sRes, aRes] = await Promise.all([
+      adminFetch(`${API_BASE}/admin/player-props/settlement-status`, { headers }),
+      adminFetch(`${API_BASE}/admin/player-props/settlement-audit?limit=50`, { headers }),
+    ]);
+    if (sRes.ok) setPpSettlementStatus(await sRes.json());
+    if (aRes.ok) setPpSettlementAudit(await aRes.json());
+  }, [adminFetch, headers]);
+
+  useEffect(() => {
+    if (!token || user?.role !== 'admin') return;
+    void fetchPpSettlementHealth();
+    const tick = setInterval(() => void fetchPpSettlementHealth(), 120_000);
+    return () => clearInterval(tick);
+  }, [token, user?.role, fetchPpSettlementHealth]);
 
   useEffect(() => {
     if (!token) {
@@ -501,6 +593,7 @@ export default function AdminPage() {
     if (activeTab === 'multipliers') {
       fetchBallMultipliers();
       fetchTossBetSettings();
+      fetchFavouriteTeamBetSettings();
       fetchTeamVsTeamBetSettings();
       fetchSimulatedCrowd();
     }
@@ -508,11 +601,13 @@ export default function AdminPage() {
     if (activeTab === 'branding') fetchBrandingSettings();
     if (activeTab === 'playerProps') {
       fetchPpMatches();
+      fetchPpSettlementHealth();
       if (ppMatchId) loadPlayerPropsDetail(ppMatchId);
     }
     if (activeTab === 'overview') {
       fetchMatchBetting();
       fetchBetOutcomeStats();
+      fetchTossAdminMatches();
     }
     if (activeTab === 'analytics') {
       fetchOnlineAnalytics();
@@ -523,22 +618,43 @@ export default function AdminPage() {
     token,
     fetchMatchBetting,
     fetchBetOutcomeStats,
+    fetchTossAdminMatches,
     fetchUsers,
     fetchWithdrawals,
     fetchDeposits,
     fetchAccounts,
     fetchBallMultipliers,
     fetchTossBetSettings,
+    fetchFavouriteTeamBetSettings,
     fetchTeamVsTeamBetSettings,
     fetchSimulatedCrowd,
     fetchBonusSettings,
     fetchBrandingSettings,
     fetchPpMatches,
+    fetchPpSettlementHealth,
     loadPlayerPropsDetail,
     ppMatchId,
     fetchOnlineAnalytics,
     fetchVisits,
   ]);
+
+  const saveManualTossWinner = async (matchId: string) => {
+    const pick = tossDraftByMatchId[matchId] ?? '';
+    setActionLoading(`tossManual_${matchId}`);
+    const res = await adminFetch(`${API_BASE}/admin/matches/${matchId}/outcome-settings`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ tossWinnerSide: pick || null }),
+    });
+    if (res.ok) {
+      showToast('Toss winner updated');
+      fetchTossAdminMatches();
+    } else {
+      const d = (await res.json().catch(() => ({}))) as { message?: string };
+      showToast(d.message || 'Failed to update toss winner', 'error');
+    }
+    setActionLoading(null);
+  };
 
   useEffect(() => {
     if (ppTeamOptions.length === 0) return;
@@ -613,6 +729,27 @@ export default function AdminPage() {
     if (res.ok) {
       showToast('Toss bet multiplier updated');
       fetchTossBetSettings();
+    } else {
+      const d = await res.json();
+      showToast(d.message || 'Failed', 'error');
+    }
+    setActionLoading(null);
+  };
+
+  const saveFavouriteTeamBetMultiplier = async () => {
+    const n = Number(favouriteTeamBetDraft);
+    if (!Number.isFinite(n) || n < 1.01 || n > 100) {
+      return showToast('Favourite team multiplier must be between 1.01 and 100', 'error');
+    }
+    setActionLoading('favouriteTeamBet');
+    const res = await adminFetch(`${API_BASE}/admin/settings/favourite-team-bet`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ favouriteTeamBetMultiplier: n }),
+    });
+    if (res.ok) {
+      showToast('Favourite team multiplier updated');
+      fetchFavouriteTeamBetSettings();
     } else {
       const d = await res.json();
       showToast(d.message || 'Failed', 'error');
@@ -1010,19 +1147,27 @@ export default function AdminPage() {
     setActionLoading(null);
   };
 
-  const tabs: { id: Tab; label: string; icon: string; badge?: number }[] = [
-    { id: 'overview', label: 'Overview', icon: '📊' },
-    { id: 'analytics', label: 'Analytics', icon: '📡' },
-    { id: 'users', label: 'Users', icon: '👥' },
-    { id: 'deposits', label: 'INR deposits', icon: '💰', badge: stats?.pendingDeposits },
-    { id: 'withdrawals', label: 'Withdrawals', icon: '💸', badge: stats?.pendingWithdrawals },
-    { id: 'accounts', label: 'Payment accounts', icon: '🏦' },
-    { id: 'multipliers', label: 'Game Multipliers', icon: '🎯' },
-    { id: 'bonus', label: 'Bonus Settings', icon: '🎁' },
-    { id: 'branding', label: 'Site branding', icon: '🎨' },
-    { id: 'playerProps', label: 'Player props', icon: '🏏' },
-    { id: 'notify', label: 'Notify Users', icon: '🔔' },
-  ];
+  const tabs: { id: Tab; label: string; icon: string; badge?: number }[] = useMemo(
+    () => [
+      { id: 'overview', label: 'Overview', icon: '📊' },
+      { id: 'analytics', label: 'Analytics', icon: '📡' },
+      { id: 'users', label: 'Users', icon: '👥' },
+      { id: 'deposits', label: 'INR deposits', icon: '💰', badge: stats?.pendingDeposits },
+      { id: 'withdrawals', label: 'Withdrawals', icon: '💸', badge: stats?.pendingWithdrawals },
+      { id: 'accounts', label: 'Payment accounts', icon: '🏦' },
+      { id: 'multipliers', label: 'Game Multipliers', icon: '🎯' },
+      { id: 'bonus', label: 'Bonus Settings', icon: '🎁' },
+      { id: 'branding', label: 'Site branding', icon: '🎨' },
+      {
+        id: 'playerProps',
+        label: 'Player props',
+        icon: '🏏',
+        badge: ppSettlementStatus?.pendingMatches,
+      },
+      { id: 'notify', label: 'Notify Users', icon: '🔔' },
+    ],
+    [stats?.pendingDeposits, stats?.pendingWithdrawals, ppSettlementStatus?.pendingMatches],
+  );
 
   return (
     <div className="min-h-screen bg-gray-900 text-white pb-mobile-nav">
@@ -1339,6 +1484,90 @@ export default function AdminPage() {
                           <td className="px-3 py-2 text-right tabular-nums">{formatInr(row.totalWonPayout ?? 0)}</td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {!statsLoading && (
+              <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6">
+                <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+                  <div>
+                    <h3 className="font-bold text-lg">Manual toss winner</h3>
+                    <p className="text-sm text-gray-400">
+                      Set or clear toss winner quickly for live/upcoming fixtures.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchTossAdminMatches}
+                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm"
+                  >
+                    ↻ Refresh
+                  </button>
+                </div>
+                <div className="overflow-x-auto -mx-2">
+                  <table className="w-full text-sm min-w-[760px]">
+                    <thead>
+                      <tr className="bg-gray-900/50 text-gray-400 text-xs uppercase tracking-wider">
+                        <th className="px-3 py-2 text-left">Match</th>
+                        <th className="px-3 py-2 text-left">Status</th>
+                        <th className="px-3 py-2 text-left">Current toss winner</th>
+                        <th className="px-3 py-2 text-left">Set manually</th>
+                        <th className="px-3 py-2 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tossAdminMatches.map((m) => (
+                        <tr key={m._id} className="border-t border-gray-700/40">
+                          <td className="px-3 py-2">
+                            <div className="font-medium text-white">
+                              {m.teamA} vs {m.teamB}
+                            </div>
+                            <div className="text-[10px] text-gray-500 font-mono truncate max-w-[260px]">{m._id}</div>
+                          </td>
+                          <td className="px-3 py-2 capitalize text-gray-300">{m.status || '—'}</td>
+                          <td className="px-3 py-2 text-gray-300">
+                            {m.tossWinnerSide === 'A'
+                              ? `A (${m.teamA})`
+                              : m.tossWinnerSide === 'B'
+                                ? `B (${m.teamB})`
+                                : '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={tossDraftByMatchId[m._id] ?? ''}
+                              onChange={(e) => {
+                                const v = e.target.value as '' | 'A' | 'B';
+                                setTossDraftByMatchId((prev) => ({ ...prev, [m._id]: v }));
+                              }}
+                              className="bg-gray-900 border border-gray-700 rounded-lg px-2 py-1 text-sm"
+                            >
+                              <option value="">Clear / Unknown</option>
+                              <option value="A">A ({m.teamA})</option>
+                              <option value="B">B ({m.teamB})</option>
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              disabled={!!actionLoading}
+                              onClick={() => saveManualTossWinner(m._id)}
+                              className="px-3 py-1.5 bg-indigo-600/80 hover:bg-indigo-500 rounded-lg text-xs font-bold disabled:opacity-50"
+                            >
+                              {actionLoading === `tossManual_${m._id}` ? 'Saving…' : 'Save'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {tossAdminMatches.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-3 py-6 text-center text-gray-500">
+                            No matches available.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1912,6 +2141,7 @@ export default function AdminPage() {
                 onClick={() => {
                   fetchBallMultipliers();
                   fetchTossBetSettings();
+                  fetchFavouriteTeamBetSettings();
                   fetchTeamVsTeamBetSettings();
                   fetchSimulatedCrowd();
                 }}
@@ -1946,6 +2176,33 @@ export default function AdminPage() {
                 className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold disabled:opacity-50"
               >
                 {actionLoading === 'tossBet' ? 'Saving…' : 'Save toss multiplier'}
+              </button>
+            </div>
+
+            <div className="bg-gray-800/60 border border-indigo-700/30 rounded-2xl p-8 space-y-5">
+              <h3 className="text-lg font-bold text-white">Favourite team (pre-match)</h3>
+              <p className="text-sm text-gray-400">
+                Fixed multiplier for both teams on <code className="text-gray-300">type: &apos;match_winner&apos;</code> bets.
+              </p>
+              <div>
+                <label className="block text-xs text-gray-500 mb-2">Favourite team multiplier (×)</label>
+                <input
+                  type="number"
+                  min={1.01}
+                  max={100}
+                  step={0.1}
+                  className="w-full max-w-xs bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 text-white"
+                  value={favouriteTeamBetDraft}
+                  onChange={(e) => setFavouriteTeamBetDraft(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                disabled={actionLoading === 'favouriteTeamBet'}
+                onClick={saveFavouriteTeamBetMultiplier}
+                className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold disabled:opacity-50"
+              >
+                {actionLoading === 'favouriteTeamBet' ? 'Saving…' : 'Save favourite team multiplier'}
               </button>
             </div>
 
@@ -2265,6 +2522,7 @@ export default function AdminPage() {
                 type="button"
                 onClick={() => {
                   fetchPpMatches();
+                  fetchPpSettlementHealth();
                   if (ppMatchId) loadPlayerPropsDetail(ppMatchId);
                 }}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm"
@@ -2276,8 +2534,89 @@ export default function AdminPage() {
             <p className="text-sm text-gray-400">
               Pick an upcoming or live match, sync squads from CricAPI (requires <code className="text-indigo-300">CRICAPI_KEY</code>{' '}
               and a match <code className="text-indigo-300">externalId</code>), then create runs/wickets markets and toggle
-              visibility for users.
+              visibility for users. Completed matches with pending props auto-retry settlement from the scorecard in the background.
             </p>
+
+            {ppSettlementStatus && ppSettlementStatus.pendingMatches > 0 && (
+              <div className="rounded-2xl border border-amber-500/35 bg-amber-950/25 p-5 text-sm">
+                <p className="font-bold text-amber-100 mb-1">
+                  Attention: player props pending settlement on {ppSettlementStatus.pendingMatches} completed match(es)
+                </p>
+                <p className="text-xs text-gray-400 mb-3">
+                  Retries use exponential backoff (server). Ensure <code className="text-gray-300">externalId</code> and squad names
+                  match scorecard spelling, or settle manually per market.
+                </p>
+                <div className="overflow-x-auto -mx-1">
+                  <table className="w-full text-xs min-w-[600px] text-left">
+                    <thead>
+                      <tr className="text-gray-500 border-b border-amber-500/20">
+                        <th className="py-2 pr-2">Match</th>
+                        <th className="py-2 pr-2">Pending bets</th>
+                        <th className="py-2 pr-2">Attempts</th>
+                        <th className="py-2 pr-2">Next retry</th>
+                        <th className="py-2">Last error</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ppSettlementStatus.items.map((row) => (
+                        <tr key={row.matchId} className="border-b border-amber-500/10 text-gray-200">
+                          <td className="py-2 pr-2">
+                            <div>{row.teamLabel}</div>
+                            <div className="text-[10px] text-gray-500 font-mono truncate max-w-[220px]">{row.matchId}</div>
+                          </td>
+                          <td className="py-2 pr-2 tabular-nums">{row.pendingBets}</td>
+                          <td className="py-2 pr-2 tabular-nums">{row.attemptCount}</td>
+                          <td className="py-2 pr-2 text-gray-400">
+                            {row.nextRetryAt ? new Date(row.nextRetryAt).toLocaleString() : '—'}
+                          </td>
+                          <td className="py-2 text-rose-300/90 text-[11px] max-w-xs truncate" title={row.lastError}>
+                            {row.lastError || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-5 space-y-2">
+              <div className="flex flex-wrap justify-between items-center gap-2">
+                <h3 className="font-bold text-lg">Settlement audit</h3>
+                <button
+                  type="button"
+                  onClick={() => fetchPpSettlementHealth()}
+                  className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs"
+                >
+                  ↻ Refresh log
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">Recent player-prop settlement events (auto, retry, manual, errors).</p>
+              <div className="max-h-52 overflow-y-auto rounded-xl border border-gray-700/80 bg-gray-900/40 divide-y divide-gray-800">
+                {ppSettlementAudit.length === 0 ? (
+                  <p className="p-4 text-sm text-gray-500">No audit rows yet.</p>
+                ) : (
+                  ppSettlementAudit.map((row) => (
+                    <div key={row.id} className="p-3 text-xs">
+                      <div className="flex flex-wrap gap-2 text-gray-300">
+                        <span className="text-indigo-300 font-mono">{row.kind}</span>
+                        <span className="text-gray-500">
+                          {row.createdAt ? new Date(row.createdAt).toLocaleString() : ''}
+                        </span>
+                        {row.matchId && (
+                          <span className="text-gray-500 font-mono truncate max-w-[140px]" title={row.matchId}>
+                            {row.matchId}
+                          </span>
+                        )}
+                      </div>
+                      <pre className="mt-1 text-[11px] text-gray-500 whitespace-pre-wrap break-all">
+                        {JSON.stringify(row.details, null, 0)}
+                      </pre>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
 
             <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 space-y-4">
               <label className="text-xs text-gray-500 uppercase font-bold tracking-wider">Match</label>
@@ -2319,6 +2658,44 @@ export default function AdminPage() {
                     className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold text-sm disabled:opacity-50"
                   >
                     Sync squad (CricAPI)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!!actionLoading}
+                    onClick={async () => {
+                      setActionLoading('ppAutoSettle');
+                      const res = await adminFetch(
+                        `${API_BASE}/admin/player-props/match/${ppMatchId}/settle-from-scorecard`,
+                        {
+                          method: 'POST',
+                          headers,
+                        },
+                      );
+                      const d = await res.json().catch(() => ({}));
+                      setActionLoading(null);
+                      if (res.ok) {
+                        await loadPlayerPropsDetail(ppMatchId);
+                        fetchPpSettlementHealth();
+                        const settled = Number((d as { settled?: number }).settled ?? 0);
+                        const unresolved = Number(
+                          (d as { unresolvedLines?: number }).unresolvedLines ?? 0,
+                        );
+                        const skipped = Number((d as { skipped?: number }).skipped ?? 0);
+                        showToast(
+                          `Auto-settle done: settled ${settled}, unresolved lines ${unresolved}, skipped ${skipped}`,
+                        );
+                      } else {
+                        showToast(
+                          (d as { message?: string })?.message || 'Auto-settle failed',
+                          'error',
+                        );
+                      }
+                    }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold text-sm disabled:opacity-50"
+                  >
+                    {actionLoading === 'ppAutoSettle'
+                      ? 'Settling…'
+                      : 'Auto-settle props (scorecard)'}
                   </button>
                 </div>
               )}
@@ -2447,28 +2824,35 @@ export default function AdminPage() {
                   </select>
                   <select
                     className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
-                    value={`${ppForm.condition}-${ppForm.threshold}`}
-                    onChange={(e) => {
-                      const [condition, threshold] = e.target.value.split('-');
+                    value={ppForm.condition}
+                    onChange={(e) =>
                       setPpForm((f) => ({
                         ...f,
-                        condition: condition as 'more_than' | 'less_than',
-                        threshold,
-                      }));
-                    }}
+                        condition: e.target.value as 'more_than' | 'less_than',
+                      }))
+                    }
                   >
-                    <option value="less_than-20">Less than 20</option>
-                    <option value="less_than-30">Less than 30</option>
-                    <option value="more_than-20">More than 20</option>
-                    <option value="more_than-30">More than 30</option>
+                    <option value="more_than">More than</option>
+                    <option value="less_than">Less than</option>
                   </select>
                   <input
                     type="number"
-                    placeholder="Custom threshold"
+                    placeholder="Run number"
                     className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
                     value={ppForm.threshold}
                     onChange={(e) => setPpForm((f) => ({ ...f, threshold: e.target.value }))}
                   />
+                  {ppForm.createOppositeOption && (
+                    <input
+                      type="number"
+                      placeholder="Opposite option run number"
+                      className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                      value={ppForm.oppositeThreshold}
+                      onChange={(e) =>
+                        setPpForm((f) => ({ ...f, oppositeThreshold: e.target.value }))
+                      }
+                    />
+                  )}
                   <input
                     type="number"
                     step="0.1"
@@ -2484,6 +2868,16 @@ export default function AdminPage() {
                       onChange={(e) => setPpForm((f) => ({ ...f, isPublished: e.target.checked }))}
                     />
                     Published (visible to users)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-300 sm:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={ppForm.createOppositeOption}
+                      onChange={(e) =>
+                        setPpForm((f) => ({ ...f, createOppositeOption: e.target.checked }))
+                      }
+                    />
+                    Create both options (more than + less than) for this line
                   </label>
                   <input
                     placeholder="Player image URL (https, optional)"
@@ -2503,8 +2897,10 @@ export default function AdminPage() {
                       statType: ppForm.statType,
                       condition: ppForm.condition,
                       threshold: Number(ppForm.threshold),
+                      oppositeThreshold: Number(ppForm.oppositeThreshold),
                       multiplier: Number(ppForm.multiplier),
                       isPublished: ppForm.isPublished,
+                      createOppositeOption: ppForm.createOppositeOption,
                     };
                     if (ppForm.playerImageUrl.trim()) {
                       payload.playerImageUrl = ppForm.playerImageUrl.trim();
@@ -2537,6 +2933,7 @@ export default function AdminPage() {
                       <th className="pb-2 pr-2">Photo</th>
                       <th className="pb-2 pr-2">Player</th>
                       <th className="pb-2 pr-2">Stat</th>
+                      <th className="pb-2 pr-2">Status</th>
                       <th className="pb-2 pr-2">×</th>
                       <th className="pb-2 pr-2">Published</th>
                       <th className="pb-2" />
@@ -2588,6 +2985,19 @@ export default function AdminPage() {
                         </td>
                         <td className="py-2 pr-2">
                           {m.statType} {m.condition === 'less_than' ? '<' : '>'} {m.threshold}
+                        </td>
+                        <td className="py-2 pr-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                              m.status === 'settled'
+                                ? 'bg-emerald-600/20 text-emerald-300'
+                                : m.status === 'locked'
+                                  ? 'bg-amber-600/20 text-amber-300'
+                                  : 'bg-slate-600/20 text-slate-300'
+                            }`}
+                          >
+                            {m.status || 'open'}
+                          </span>
                         </td>
                         <td className="py-2 pr-2 font-mono">{m.multiplier}×</td>
                         <td className="py-2 pr-2">

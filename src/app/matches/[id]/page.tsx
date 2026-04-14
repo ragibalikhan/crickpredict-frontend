@@ -29,6 +29,25 @@ function formatMultiplierLabel(n: number | undefined): string {
   return `${Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)}×`;
 }
 
+function humanizePropLabel(label: string): { title: string; condition: string } {
+  const raw = String(label || '').trim();
+  const moreMatch = raw.match(/^(.*?)(?:\s*>\s*|\s+more than\s+)(\d+(?:\.\d+)?)$/i);
+  if (moreMatch) {
+    return {
+      title: moreMatch[1].trim(),
+      condition: `More than ${moreMatch[2]}`,
+    };
+  }
+  const lessMatch = raw.match(/^(.*?)(?:\s*<\s*|\s+less than\s+)(\d+(?:\.\d+)?)$/i);
+  if (lessMatch) {
+    return {
+      title: lessMatch[1].trim(),
+      condition: `Less than ${lessMatch[2]}`,
+    };
+  }
+  return { title: raw, condition: '' };
+}
+
 type SchedulePayload = {
   nextMatch: {
     _id: string;
@@ -61,13 +80,22 @@ type PrematchOddsPayload = {
   };
 };
 
-type PlayerPropHomeItem = {
+type PlayerPropMatchRow = {
   matchId: string;
+  teamA: string;
+  teamB: string;
+  /** Overall gate; each market also has bettingOpen */
   bettingOpen: boolean;
   market: {
     id: string;
     label: string;
     multiplier: number;
+    playerName?: string;
+    teamName?: string;
+    statType?: string;
+    playerImageUrl?: string | null;
+    /** Per-line: false when live and allowLiveBetting is off */
+    bettingOpen?: boolean;
   };
 };
 
@@ -88,7 +116,13 @@ export default function MatchPage() {
   const [prematchBusy, setPrematchBusy] = useState<string | null>(null);
   const [tossBetPlaced, setTossBetPlaced] = useState(false);
   const [riskMatchBetPlaced, setRiskMatchBetPlaced] = useState(false);
-  const [playerPropItems, setPlayerPropItems] = useState<PlayerPropHomeItem[]>([]);
+  const [playerPropItems, setPlayerPropItems] = useState<PlayerPropMatchRow[]>([]);
+  const [livePropStats, setLivePropStats] = useState<{
+    ok: boolean;
+    reason?: string;
+    fetchedAt?: string;
+    byMarketId: Record<string, { liveRuns: number | null; liveWickets: number | null }>;
+  }>({ ok: false, byMarketId: {} });
   const [gameMultipliers, setGameMultipliers] = useState<{
     ballMultipliers: Record<string, number>;
     nonBallMultiplierRange: { min: number; max: number };
@@ -161,14 +195,113 @@ export default function MatchPage() {
 
   useEffect(() => {
     if (!matchId) return;
-    fetch(`${API_BASE}/player-props/home`)
+    fetch(`${API_BASE}/player-props/match/${matchId}/markets`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { items?: PlayerPropHomeItem[] } | null) => {
-        const all = Array.isArray(data?.items) ? data!.items : [];
-        setPlayerPropItems(all.filter((row) => String(row.matchId) === String(matchId)).slice(0, 3));
-      })
+      .then(
+        (
+          data: {
+            match?: {
+              _id: string;
+              teamA: string;
+              teamB: string;
+              status?: string;
+            };
+            bettingOpen?: boolean;
+            markets?: Array<{
+              id: string;
+              label: string;
+              multiplier: number;
+              playerName: string;
+              teamName: string;
+              statType?: string;
+              playerImageUrl?: string | null;
+              bettingOpen?: boolean;
+            }>;
+          } | null,
+        ) => {
+          if (!data?.match || !Array.isArray(data.markets)) {
+            setPlayerPropItems([]);
+            return;
+          }
+          const m = data.match;
+          setPlayerPropItems(
+            data.markets.map((mk) => ({
+              matchId: String(m._id),
+              teamA: m.teamA,
+              teamB: m.teamB,
+              bettingOpen: !!data.bettingOpen,
+              market: {
+                id: mk.id,
+                label: mk.label,
+                multiplier: mk.multiplier,
+                playerName: mk.playerName,
+                teamName: mk.teamName,
+                statType: mk.statType,
+                playerImageUrl: mk.playerImageUrl ?? null,
+                bettingOpen: mk.bettingOpen,
+              },
+            })),
+          );
+        },
+      )
       .catch(() => setPlayerPropItems([]));
   }, [matchId]);
+
+  useEffect(() => {
+    if (!matchId) return;
+    const liveOrDone =
+      liveMatch?.status === 'live' || liveMatch?.status === 'completed';
+    if (!liveOrDone || playerPropItems.length === 0) {
+      setLivePropStats({ ok: false, byMarketId: {} });
+      return;
+    }
+    let cancelled = false;
+    const load = () => {
+      fetch(`${API_BASE}/player-props/match/${matchId}/live-stats`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then(
+          (
+            data: {
+              ok?: boolean;
+              reason?: string;
+              fetchedAt?: string;
+              markets?: Array<{
+                marketId: string;
+                liveRuns: number | null;
+                liveWickets: number | null;
+              }>;
+            } | null,
+        ) => {
+          if (cancelled || !data) return;
+          const byMarketId: Record<
+            string,
+            { liveRuns: number | null; liveWickets: number | null }
+          > = {};
+          for (const row of data.markets || []) {
+            if (row.marketId)
+              byMarketId[row.marketId] = {
+                liveRuns: row.liveRuns ?? null,
+                liveWickets: row.liveWickets ?? null,
+              };
+          }
+          setLivePropStats({
+            ok: !!data.ok,
+            reason: data.reason,
+            fetchedAt: data.fetchedAt,
+            byMarketId,
+          });
+        })
+        .catch(() => {
+          if (!cancelled) setLivePropStats({ ok: false, byMarketId: {}, reason: 'Network error' });
+        });
+    };
+    load();
+    const id = setInterval(load, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [matchId, liveMatch?.status, playerPropItems.length]);
 
   useEffect(() => {
     if (!token || !matchId) {
@@ -1018,37 +1151,6 @@ export default function MatchPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-indigo-500/25 bg-indigo-950/20 p-4">
-                    <p className="text-sm font-black text-indigo-200 mb-1">Favourite team (pre-match)</p>
-                    <p className="text-xs text-gray-400 mb-3">Choose your favourite before match starts.</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        disabled={prematchBusy != null || displayMatch.status !== 'upcoming'}
-                        onClick={() => placeOutcomeBet('match_winner', 'A')}
-                        className="rounded-xl bg-indigo-900/50 hover:bg-indigo-800/60 border border-indigo-600/50 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 disabled:pointer-events-none"
-                      >
-                        {prematchBusy === 'match_winner-A'
-                          ? 'Placing...'
-                          : `${displayMatch.teamA} · ${formatMultiplierLabel(
-                              prematchOdds?.betting?.matchWinner?.multiplierA,
-                            )}`}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={prematchBusy != null || displayMatch.status !== 'upcoming'}
-                        onClick={() => placeOutcomeBet('match_winner', 'B')}
-                        className="rounded-xl bg-indigo-900/50 hover:bg-indigo-800/60 border border-indigo-600/50 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 disabled:pointer-events-none"
-                      >
-                        {prematchBusy === 'match_winner-B'
-                          ? 'Placing...'
-                          : `${displayMatch.teamB} · ${formatMultiplierLabel(
-                              prematchOdds?.betting?.matchWinner?.multiplierB,
-                            )}`}
-                      </button>
-                    </div>
-                  </div>
-
                   <div className="rounded-2xl border border-violet-500/25 bg-violet-950/20 p-4">
                     <p className="text-sm font-black text-violet-200 mb-1">Risk Match vs Match</p>
                     {riskMatchBetPlaced ? (
@@ -1089,31 +1191,98 @@ export default function MatchPage() {
                   </div>
 
                   <div className="rounded-2xl border border-emerald-500/25 bg-emerald-950/20 p-4">
-                    <p className="text-sm font-black text-emerald-200 mb-1">Player prop favourites</p>
+                    <p className="text-sm font-black text-emerald-200 mb-1">Player props</p>
+                    {(displayMatch.status === 'live' || displayMatch.status === 'completed') &&
+                    playerPropItems.length > 0 &&
+                    !livePropStats.ok &&
+                    livePropStats.reason ? (
+                      <p className="text-xs text-amber-200/90 mb-2">{livePropStats.reason}</p>
+                    ) : null}
                     {playerPropItems.length === 0 ? (
                       <p className="text-xs text-gray-400">
                         No player prop market available for this match yet. You can also check{' '}
                         <Link href="/dashboard" className="text-indigo-300 hover:underline">Dashboard</Link>.
                       </p>
                     ) : (
-                      <div className="space-y-2">
-                        {playerPropItems.map((row) => (
-                          <button
+                      <div className="max-h-[30rem] overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {playerPropItems.map((row) => {
+                          const propLine = humanizePropLabel(row.market.label);
+                          const showScorecard =
+                            (displayMatch.status === 'live' ||
+                              displayMatch.status === 'completed') &&
+                            livePropStats.ok;
+                          const isWk = (row.market.statType || '').toLowerCase() === 'wickets';
+                          const snap = livePropStats.byMarketId[row.market.id];
+                          let scorecardLine: string | null = null;
+                          if (showScorecard) {
+                            const tag =
+                              displayMatch.status === 'completed' ? 'final' : 'live';
+                            if (isWk) {
+                              const w = snap?.liveWickets;
+                              scorecardLine =
+                                w != null
+                                  ? `${w} ${w === 1 ? 'wicket' : 'wickets'} (${tag})`
+                                  : '—';
+                            } else {
+                              const r = snap?.liveRuns;
+                              scorecardLine =
+                                r != null
+                                  ? `${r} ${r === 1 ? 'run' : 'runs'} (${tag})`
+                                  : '—';
+                            }
+                          }
+                          return (
+                          <div
                             key={row.market.id}
-                            type="button"
-                            disabled={prematchBusy != null || !row.bettingOpen}
-                            onClick={() => placePlayerPropBet(row.market.id, row.market.label)}
-                            className="w-full rounded-xl bg-emerald-900/40 hover:bg-emerald-800/50 border border-emerald-600/40 px-3 py-2.5 text-left text-sm text-white disabled:opacity-40 disabled:pointer-events-none"
+                            className="rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-950/60 via-emerald-900/35 to-teal-950/45 p-3 shadow-lg shadow-emerald-950/30 hover:border-emerald-300/60 transition-colors"
                           >
-                            <span className="font-semibold">{row.market.label}</span>
-                            <span className="ml-2 text-amber-200 font-mono">
-                              {formatMultiplierLabel(row.market.multiplier)}
-                            </span>
-                            {prematchBusy === `prop-${row.market.id}` && (
-                              <span className="ml-2 text-xs text-gray-300">Placing...</span>
-                            )}
-                          </button>
-                        ))}
+                            <div className="flex items-start gap-2 mb-2">
+                              <div className="h-12 w-12 shrink-0 rounded-xl bg-gray-900 border border-gray-700 overflow-hidden flex items-center justify-center">
+                                {row.market.playerImageUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={row.market.playerImageUrl}
+                                    alt=""
+                                    className="h-full w-full object-cover"
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <span className="text-gray-500 text-lg font-black" aria-hidden>
+                                    {(row.market.playerName || row.market.label).slice(0, 1).toUpperCase()}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[11px] text-emerald-200/80 uppercase tracking-wide truncate">
+                                  {row.market.teamName || 'Player prop'}
+                                </p>
+                                <p className="text-sm font-semibold text-white leading-snug">{propLine.title}</p>
+                                {propLine.condition ? (
+                                  <span className="inline-flex mt-1 rounded-full border border-emerald-400/45 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-200">
+                                    {propLine.condition}
+                                  </span>
+                                ) : null}
+                                {scorecardLine ? (
+                                  <p className="mt-1.5 text-[11px] font-semibold text-cyan-200/95 tabular-nums">
+                                    Scorecard: {scorecardLine}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={prematchBusy != null || !row.bettingOpen}
+                              onClick={() => placePlayerPropBet(row.market.id, row.market.label)}
+                              className="w-full rounded-lg bg-emerald-700/60 hover:bg-emerald-600/70 px-3 py-2 text-sm text-white disabled:opacity-40 disabled:pointer-events-none"
+                            >
+                              Bet · {formatMultiplierLabel(row.market.multiplier)}
+                              {prematchBusy === `prop-${row.market.id}` && (
+                                <span className="ml-1 text-xs text-gray-200">Placing...</span>
+                              )}
+                            </button>
+                          </div>
+                        );
+                        })}
                       </div>
                     )}
                   </div>

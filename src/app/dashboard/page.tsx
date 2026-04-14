@@ -4,11 +4,29 @@ import Link from 'next/link';
 import { useStore } from '../../store/store';
 import { API_BASE } from '../../lib/api';
 import TeamAvatar from '../../components/TeamAvatar';
-import BetOnFavourites from '../../components/BetOnFavourites';
 
 const DASHBOARD_RECENTLY_ENDED_MS = 6 * 60 * 60 * 1000;
 
-function formatEndedMeta(completedAtIso?: string): { absolute: string; relative: string; dropsIn?: string } | null {
+function getEffectiveCompletedAtIso(match: DashboardMatch): string | undefined {
+  if (match.status !== 'completed') return match.completedAt;
+  const completedMs = match.completedAt ? new Date(match.completedAt).getTime() : NaN;
+  const schedMs = match.scheduledStartAt ? new Date(match.scheduledStartAt).getTime() : NaN;
+  if (!Number.isNaN(schedMs)) {
+    const estMs = schedMs + 4 * 60 * 60 * 1000;
+    if (!Number.isNaN(completedMs)) {
+      // Feed/poller flaps can keep rewriting completedAt to "now"; clamp to realistic end estimate.
+      if (completedMs > estMs + 60 * 60 * 1000) return new Date(estMs).toISOString();
+      return match.completedAt;
+    }
+    if (estMs <= Date.now()) return new Date(estMs).toISOString();
+  }
+  return match.completedAt;
+}
+
+function formatEndedMeta(
+  completedAtIso: string | undefined,
+  nowMs: number,
+): { absolute: string; relative: string; dropsIn?: string } | null {
   if (!completedAtIso) return null;
   const t = new Date(completedAtIso).getTime();
   if (Number.isNaN(t)) return null;
@@ -16,7 +34,7 @@ function formatEndedMeta(completedAtIso?: string): { absolute: string; relative:
     dateStyle: 'medium',
     timeStyle: 'short',
   });
-  const agoMs = Date.now() - t;
+  const agoMs = nowMs - t;
   const sec = Math.max(0, Math.floor(agoMs / 1000));
   let relative: string;
   if (sec < 60) relative = `${sec}s ago`;
@@ -59,6 +77,7 @@ export default function Dashboard() {
   const [matches, setMatches] = useState<DashboardMatch[]>([]);
   const [scheduleSummary, setScheduleSummary] = useState<ScheduleSummary | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
   /**
    * GET /matches is public on the API — do not gate on JWT. If we only fetched when `token` was set,
@@ -111,6 +130,11 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     if (typeof window !== 'undefined' && sessionStorage.getItem('signup_bonus_toast')) {
       // Small delay to ensure the UI is rendered
       setTimeout(() => {
@@ -144,7 +168,13 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <BetOnFavourites />
+        <section className="mb-8 sm:mb-10 rounded-2xl border border-violet-500/25 bg-violet-950/20 p-4 sm:p-5">
+          <p className="text-xs font-bold uppercase tracking-widest text-violet-300 mb-1">Recommended</p>
+          <h2 className="text-lg sm:text-xl font-black text-white mb-1">Try pre-match markets</h2>
+          <p className="text-sm text-gray-300">
+            Explore pre-match bets like Toss, Risk Match vs Match, and Player Props directly from each match page.
+          </p>
+        </section>
 
         <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
           <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>
@@ -220,18 +250,31 @@ export default function Dashboard() {
           </div>
         )}
 
-        {matches.length === 0 && !loadError ? (
+        {(() => {
+          const visibleMatches = matches.filter((m) => {
+            if (m.status !== 'completed') return true;
+            const endIso = getEffectiveCompletedAtIso(m);
+            if (!endIso) return false;
+            const t = new Date(endIso).getTime();
+            if (Number.isNaN(t)) return false;
+            return nowMs - t <= DASHBOARD_RECENTLY_ENDED_MS;
+          });
+
+          return visibleMatches.length === 0 && !loadError ? (
            <div className="text-center p-12 bg-gray-800/50 rounded-3xl border border-gray-700/50 border-dashed">
              <p className="text-gray-400 mb-2">No IPL matches to show yet.</p>
              <p className="text-gray-600 text-sm max-w-md mx-auto leading-relaxed">
                The server returned an empty list: MongoDB may have no synced fixtures yet, or rows may be filtered (e.g. demo test data). Ensure the backend can reach Cricbuzz and Mongo. In Admin, use &quot;Resync live &amp; upcoming&quot; after deploy. If the site uses a direct API URL, set <code className="text-gray-500">CORS_ORIGINS</code> on the server to include this origin.
              </p>
            </div>
-        ) : matches.length === 0 ? null : (
+          ) : visibleMatches.length === 0 ? null : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {matches.map((match) => {
+            {visibleMatches.map((match) => {
+              const effectiveCompletedAtIso = getEffectiveCompletedAtIso(match);
               const endedMeta =
-                match.status === 'completed' ? formatEndedMeta(match.completedAt) : null;
+                match.status === 'completed'
+                  ? formatEndedMeta(effectiveCompletedAtIso, nowMs)
+                  : null;
               return (
               <Link href={`/matches/${match._id}`} key={match._id} className="block group min-w-0">
                 <div className="bg-gray-800/60 hover:bg-gray-800 border border-gray-700/50 hover:border-indigo-500/50 p-4 sm:p-6 rounded-2xl sm:rounded-3xl transition-all sm:transform sm:hover:-translate-y-2 sm:hover:shadow-2xl sm:hover:shadow-indigo-500/10 active:scale-[0.99]">
@@ -316,7 +359,8 @@ export default function Dashboard() {
             );
             })}
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

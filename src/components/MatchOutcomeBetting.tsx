@@ -8,9 +8,7 @@ type OutcomeOddsPayload = {
   teamA: string;
   teamB: string;
   status: string;
-  tossWinnerSide?: string | null;
   betting: {
-    toss: { open: boolean; multiplier: number };
     matchWinner: {
       open: boolean;
       probA: number;
@@ -63,7 +61,7 @@ export default function MatchOutcomeBetting(props: {
     return () => clearInterval(t);
   }, [load]);
 
-  const place = async (kind: 'toss' | 'match_winner' | 'live_match_winner', side: 'A' | 'B') => {
+  const place = async (kind: 'match_winner' | 'live_match_winner', side: 'A' | 'B') => {
     if (!token) {
       alert('Please log in to place a bet.');
       return;
@@ -101,7 +99,7 @@ export default function MatchOutcomeBetting(props: {
 
   const b = odds.betting;
   const showAny =
-    (status === 'upcoming' && (b.toss.open || b.matchWinner.open)) ||
+    (status === 'upcoming' && b.matchWinner.open) ||
     (status === 'live' && b.liveMatchWinner.open);
 
   if (!showAny) return null;
@@ -110,7 +108,7 @@ export default function MatchOutcomeBetting(props: {
     <section className="mb-8 rounded-2xl border border-emerald-700/40 bg-emerald-950/20 p-5 md:p-6">
       <h3 className="text-lg font-black text-emerald-200 mb-1">Match markets</h3>
       <p className="text-xs text-gray-500 mb-4">
-        Toss &amp; pre-match winner close before start. Live match-winner uses live win % — your multiplier is{' '}
+        Pre-match and live winner markets. Live match-winner uses live win % — your multiplier is{' '}
         <strong className="text-gray-300">locked at bet time</strong>.
       </p>
 
@@ -118,31 +116,6 @@ export default function MatchOutcomeBetting(props: {
         <p className="text-sm text-red-300 mb-3" role="alert">
           {err}
         </p>
-      )}
-
-      {status === 'upcoming' && b.toss.open && (
-        <div className="mb-5 pb-5 border-b border-gray-700/50">
-          <p className="text-sm font-bold text-white mb-2">🪙 Toss winner</p>
-          <p className="text-xs text-gray-500 mb-3">Fixed {fmtMult(b.toss.multiplier)} · pick a side</p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={!!busy}
-              onClick={() => place('toss', 'A')}
-              className="flex-1 min-w-[8rem] rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-600 py-2.5 px-3 text-sm font-bold text-white disabled:opacity-50"
-            >
-              {busy === 'toss-A' ? '…' : `${teamA} · ${fmtMult(b.toss.multiplier)}`}
-            </button>
-            <button
-              type="button"
-              disabled={!!busy}
-              onClick={() => place('toss', 'B')}
-              className="flex-1 min-w-[8rem] rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-600 py-2.5 px-3 text-sm font-bold text-white disabled:opacity-50"
-            >
-              {busy === 'toss-B' ? '…' : `${teamB} · ${fmtMult(b.toss.multiplier)}`}
-            </button>
-          </div>
-        </div>
       )}
 
       {status === 'upcoming' && b.matchWinner.open && (
