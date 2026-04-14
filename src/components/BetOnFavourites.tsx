@@ -121,7 +121,7 @@ export default function BetOnFavourites() {
       <section className="w-full mb-10 sm:mb-12 rounded-2xl border border-gray-700/50 bg-gray-800/30 px-4 py-8">
         <h2 className="text-xl md:text-2xl font-black text-white text-center mb-2">Bet on Favourites</h2>
         <p className="text-center text-sm text-gray-500">
-          No pre-match player picks right now — check back after admins publish markets.
+          No pre-match player picks right now — check back soon.
         </p>
       </section>
     );

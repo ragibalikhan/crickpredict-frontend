@@ -1107,7 +1107,7 @@ export default function MatchPage() {
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-300/80 mb-2">Over markets</p>
                   <p className="text-2xl sm:text-3xl font-black text-white mb-2">Coming soon</p>
                   <p className="text-sm text-gray-400 max-w-md mx-auto">
-                    Totals, maidens, and wicket-in-over props will launch here after settlement logic is wired to live overs.
+                    Totals, maidens, and over-based props will be available here in a future update.
                   </p>
                 </div>
               )}
@@ -1119,9 +1119,7 @@ export default function MatchPage() {
                     {tossBetPlaced ? (
                       <p className="text-sm text-emerald-200 font-semibold">You have placed bet on toss.</p>
                     ) : (
-                      <p className="text-xs text-gray-400 mb-3">
-                        You can bet on toss only one time.
-                      </p>
+                      <p className="text-xs text-gray-400 mb-3">One toss pick per match.</p>
                     )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <button
@@ -1155,11 +1153,11 @@ export default function MatchPage() {
                     <p className="text-sm font-black text-violet-200 mb-1">Risk Match vs Match</p>
                     {riskMatchBetPlaced ? (
                       <p className="text-xs text-emerald-200 font-semibold mb-3">
-                        You have done for today on this.
+                        You’ve already placed this bet.
                       </p>
                     ) : (
                       <p className="text-xs text-gray-400 mb-3">
-                        Multiplier is controlled from admin panel percentages. If your team loses, return is 0x.
+                        Pick the winning side. If your pick loses, payout is 0×.
                       </p>
                     )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1194,9 +1192,10 @@ export default function MatchPage() {
                     <p className="text-sm font-black text-emerald-200 mb-1">Player props</p>
                     {(displayMatch.status === 'live' || displayMatch.status === 'completed') &&
                     playerPropItems.length > 0 &&
-                    !livePropStats.ok &&
-                    livePropStats.reason ? (
-                      <p className="text-xs text-amber-200/90 mb-2">{livePropStats.reason}</p>
+                    !livePropStats.ok ? (
+                      <p className="text-xs text-amber-200/90 mb-2">
+                        Live scorecard numbers aren’t available right now. Stats will show when the feed updates.
+                      </p>
                     ) : null}
                     {playerPropItems.length === 0 ? (
                       <p className="text-xs text-gray-400">

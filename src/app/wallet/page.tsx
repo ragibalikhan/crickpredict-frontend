@@ -98,7 +98,7 @@ export default function WalletPage() {
       const data = await res.json();
       if (res.ok) {
         setUtrReference('');
-        alert(data.message || 'Deposit request submitted. Wait for admin approval.');
+        alert(data.message || 'Deposit request submitted. It will be reviewed shortly.');
         fetchHistory();
       } else {
         alert(data.message || 'Request failed');
@@ -205,13 +205,13 @@ export default function WalletPage() {
 
             {transactionType === 'withdraw' && (
               <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-yellow-400 text-xs">
-                ⚠️ Withdrawals require admin approval (usually within 24 hours). Your balance will be debited only after approval.
+                ⚠️ Withdrawals are reviewed before payout (usually within 24 hours). Your balance is debited only after approval.
               </div>
             )}
 
             {transactionType === 'deposit' && (
               <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-300 text-xs">
-                Pay the amount below to our UPI/bank using the selected account, then submit your UTR. Your wallet is credited in INR after admin verifies the payment.
+                Pay the amount below to our UPI/bank using the selected account, then submit your UTR. Your wallet is credited in INR after we verify your payment.
               </div>
             )}
 
@@ -243,7 +243,7 @@ export default function WalletPage() {
                       className="w-full bg-gray-900/80 p-3 rounded-xl border border-gray-700 text-white outline-none"
                     >
                       {!depositInfo?.accounts?.length ? (
-                        <option value="">No accounts configured — ask admin</option>
+                        <option value="">No payment accounts available — try again later or contact support</option>
                       ) : (
                         depositInfo.accounts.map((a) => (
                           <option key={a._id} value={a._id}>

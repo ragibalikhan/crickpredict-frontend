@@ -264,7 +264,7 @@ export default function Dashboard() {
            <div className="text-center p-12 bg-gray-800/50 rounded-3xl border border-gray-700/50 border-dashed">
              <p className="text-gray-400 mb-2">No IPL matches to show yet.</p>
              <p className="text-gray-600 text-sm max-w-md mx-auto leading-relaxed">
-               The server returned an empty list: MongoDB may have no synced fixtures yet, or rows may be filtered (e.g. demo test data). Ensure the backend can reach Cricbuzz and Mongo. In Admin, use &quot;Resync live &amp; upcoming&quot; after deploy. If the site uses a direct API URL, set <code className="text-gray-500">CORS_ORIGINS</code> on the server to include this origin.
+               Fixtures will appear here when they are available. Check back soon.
              </p>
            </div>
           ) : visibleMatches.length === 0 ? null : (
