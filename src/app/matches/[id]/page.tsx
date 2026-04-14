@@ -87,7 +87,7 @@ export default function MatchPage() {
   const [prematchOdds, setPrematchOdds] = useState<PrematchOddsPayload | null>(null);
   const [prematchBusy, setPrematchBusy] = useState<string | null>(null);
   const [tossBetPlaced, setTossBetPlaced] = useState(false);
-  const [riskMatchBetsToday, setRiskMatchBetsToday] = useState(0);
+  const [riskMatchBetPlaced, setRiskMatchBetPlaced] = useState(false);
   const [playerPropItems, setPlayerPropItems] = useState<PlayerPropHomeItem[]>([]);
   const [gameMultipliers, setGameMultipliers] = useState<{
     ballMultipliers: Record<string, number>;
@@ -173,7 +173,7 @@ export default function MatchPage() {
   useEffect(() => {
     if (!token || !matchId) {
       setTossBetPlaced(false);
-      setRiskMatchBetsToday(0);
+      setRiskMatchBetPlaced(false);
       return;
     }
     fetch(`${API_BASE}/predictions/me`, {
@@ -185,19 +185,14 @@ export default function MatchPage() {
           (row) => row?.type === 'toss' && String(row?.matchId) === String(matchId),
         );
         setTossBetPlaced(placed);
-        const dayStart = new Date();
-        dayStart.setHours(0, 0, 0, 0);
-        const riskCount = (rows ?? []).filter((row) => {
-          if (row?.type !== 'team_vs_team') return false;
-          if (String(row?.matchId) !== String(matchId)) return false;
-          const createdAt = row?.createdAt ? new Date(row.createdAt).getTime() : 0;
-          return Number.isFinite(createdAt) && createdAt >= dayStart.getTime();
-        }).length;
-        setRiskMatchBetsToday(riskCount);
+        const riskPlaced = (rows ?? []).some(
+          (row) => row?.type === 'team_vs_team' && String(row?.matchId) === String(matchId),
+        );
+        setRiskMatchBetPlaced(riskPlaced);
       })
       .catch(() => {
         setTossBetPlaced(false);
-        setRiskMatchBetsToday(0);
+        setRiskMatchBetPlaced(false);
       });
   }, [token, matchId]);
 
@@ -299,9 +294,7 @@ export default function MatchPage() {
         const msg = `You placed your bet: ${formatInr(stake)} on ${marketLabel}`;
         setToastMsg(msg);
         setBetPlacedPopup(msg);
-        if (kind === 'team_vs_team') {
-          setRiskMatchBetsToday((n) => Math.min(3, n + 1));
-        }
+        if (kind === 'team_vs_team') setRiskMatchBetPlaced(true);
       } else {
         alert(data?.message || 'Failed to place pre-match bet.');
       }
@@ -1058,19 +1051,19 @@ export default function MatchPage() {
 
                   <div className="rounded-2xl border border-violet-500/25 bg-violet-950/20 p-4">
                     <p className="text-sm font-black text-violet-200 mb-1">Risk Match vs Match</p>
-                    {riskMatchBetsToday >= 3 ? (
+                    {riskMatchBetPlaced ? (
                       <p className="text-xs text-emerald-200 font-semibold mb-3">
                         You have done for today on this.
                       </p>
                     ) : (
                       <p className="text-xs text-gray-400 mb-3">
-                        Multiplier is controlled from admin panel. You can bet 3 times per day on this market.
+                        Multiplier is controlled from admin panel percentages. If your team loses, return is 0x.
                       </p>
                     )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <button
                         type="button"
-                        disabled={prematchBusy != null || displayMatch.status !== 'upcoming' || riskMatchBetsToday >= 3}
+                        disabled={prematchBusy != null || displayMatch.status !== 'upcoming' || riskMatchBetPlaced}
                         onClick={() => placeOutcomeBet('team_vs_team', 'A')}
                         className="rounded-xl bg-violet-900/50 hover:bg-violet-800/60 border border-violet-600/50 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 disabled:pointer-events-none"
                       >
@@ -1082,7 +1075,7 @@ export default function MatchPage() {
                       </button>
                       <button
                         type="button"
-                        disabled={prematchBusy != null || displayMatch.status !== 'upcoming' || riskMatchBetsToday >= 3}
+                        disabled={prematchBusy != null || displayMatch.status !== 'upcoming' || riskMatchBetPlaced}
                         onClick={() => placeOutcomeBet('team_vs_team', 'B')}
                         className="rounded-xl bg-violet-900/50 hover:bg-violet-800/60 border border-violet-600/50 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 disabled:pointer-events-none"
                       >
@@ -1093,9 +1086,6 @@ export default function MatchPage() {
                             )}`}
                       </button>
                     </div>
-                    <p className="text-[11px] text-violet-200/80 mt-2">
-                      Attempts used today: {riskMatchBetsToday}/3
-                    </p>
                   </div>
 
                   <div className="rounded-2xl border border-emerald-500/25 bg-emerald-950/20 p-4">

@@ -140,6 +140,7 @@ export default function AdminPage() {
   });
   const [tossBetDraft, setTossBetDraft] = useState('1.8');
   const [teamVsTeamBetDraft, setTeamVsTeamBetDraft] = useState('2');
+  const [teamVsTeamProbDraft, setTeamVsTeamProbDraft] = useState('50');
   const [simCrowdDraft, setSimCrowdDraft] = useState({ enabled: false, winBiasPercent: 80 });
   const [bonusSettings, setBonusSettings] = useState({
     signupBonusAmount: 50,
@@ -188,6 +189,7 @@ export default function AdminPage() {
       teamName: string;
       playerName: string;
       statType: string;
+      condition?: 'more_than' | 'less_than';
       threshold: number;
       multiplier: number;
       isPublished: boolean;
@@ -199,7 +201,8 @@ export default function AdminPage() {
     teamName: '',
     playerName: '',
     statType: 'runs' as 'runs' | 'wickets',
-    threshold: '50',
+    condition: 'more_than' as 'more_than' | 'less_than',
+    threshold: '20',
     multiplier: '5',
     isPublished: false,
     playerImageUrl: '',
@@ -209,6 +212,16 @@ export default function AdminPage() {
     name: '',
     role: 'batsman' as 'batsman' | 'bowler' | 'keeper_batsman' | 'all_rounder',
   });
+
+  const ppTeamOptions = useMemo(() => {
+    const set = new Set<string>();
+    if (ppSquadData?.match?.teamA) set.add(ppSquadData.match.teamA);
+    if (ppSquadData?.match?.teamB) set.add(ppSquadData.match.teamB);
+    for (const t of ppSquadData?.squad?.teams || []) {
+      if (t.teamName) set.add(t.teamName);
+    }
+    return Array.from(set);
+  }, [ppSquadData]);
 
   const [onlineWithin, setOnlineWithin] = useState(2);
   const [onlineRole, setOnlineRole] = useState<'user' | 'admin' | 'all'>('user');
@@ -342,9 +355,11 @@ export default function AdminPage() {
     if (!res.ok) return;
     const d = await res.json();
     const m = d.teamVsTeamBetMultiplier;
+    const p = Number(d.teamVsTeamProbA ?? 0.5);
     setTeamVsTeamBetDraft(
       typeof m === 'number' && Number.isFinite(m) ? String(m) : '2',
     );
+    setTeamVsTeamProbDraft(String(Math.round(Math.min(97, Math.max(3, p * 100)))));
   }, [adminFetch, headers]);
 
   const fetchSimulatedCrowd = useCallback(async () => {
@@ -525,6 +540,20 @@ export default function AdminPage() {
     fetchVisits,
   ]);
 
+  useEffect(() => {
+    if (ppTeamOptions.length === 0) return;
+    setPpForm((f) =>
+      f.teamName && ppTeamOptions.includes(f.teamName)
+        ? f
+        : { ...f, teamName: ppTeamOptions[0] },
+    );
+    setPpManual((m) =>
+      m.teamName && ppTeamOptions.includes(m.teamName)
+        ? m
+        : { ...m, teamName: ppTeamOptions[0] },
+    );
+  }, [ppTeamOptions]);
+
   const saveCoinRate = async () => {
     const n = Number(coinRateDraft);
     if (!Number.isFinite(n) || n < 1) return showToast('Enter a valid wallet multiplier (per ₹1 paid)', 'error');
@@ -593,14 +622,18 @@ export default function AdminPage() {
 
   const saveTeamVsTeamBetMultiplier = async () => {
     const n = Number(teamVsTeamBetDraft);
+    const pct = Number(teamVsTeamProbDraft);
     if (!Number.isFinite(n) || n < 1.01 || n > 100) {
       return showToast('Risk Match vs Match multiplier must be between 1.01 and 100', 'error');
+    }
+    if (!Number.isFinite(pct) || pct < 3 || pct > 97) {
+      return showToast('Team A chance must be between 3% and 97%', 'error');
     }
     setActionLoading('teamVsTeamBet');
     const res = await adminFetch(`${API_BASE}/admin/settings/team-vs-team-bet`, {
       method: 'PATCH',
       headers,
-      body: JSON.stringify({ teamVsTeamBetMultiplier: n }),
+      body: JSON.stringify({ teamVsTeamBetMultiplier: n, teamVsTeamProbA: pct / 100 }),
     });
     if (res.ok) {
       showToast('Risk Match vs Match multiplier updated');
@@ -1920,7 +1953,7 @@ export default function AdminPage() {
               <h3 className="text-lg font-bold text-white">Risk Match vs Match (pre-match)</h3>
               <p className="text-sm text-gray-400">
                 Fixed multiplier for both teams on <code className="text-gray-300">type: &apos;team_vs_team&apos;</code> bets.
-                This controls the Risk Match vs Match market shown in the pre-match tab.
+                This controls the Risk Match vs Match market shown in the pre-match tab. Losing side returns 0x.
               </p>
               <div>
                 <label className="block text-xs text-gray-500 mb-2">Risk Match vs Match multiplier (×)</label>
@@ -1933,6 +1966,21 @@ export default function AdminPage() {
                   value={teamVsTeamBetDraft}
                   onChange={(e) => setTeamVsTeamBetDraft(e.target.value)}
                 />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-2">Team A win chance (%)</label>
+                <input
+                  type="number"
+                  min={3}
+                  max={97}
+                  step={1}
+                  className="w-full max-w-xs bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 text-white"
+                  value={teamVsTeamProbDraft}
+                  onChange={(e) => setTeamVsTeamProbDraft(e.target.value)}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Team B chance auto = 100 - Team A. Display multipliers adjust from these percentages.
+                </p>
               </div>
               <button
                 type="button"
@@ -2305,12 +2353,18 @@ export default function AdminPage() {
                 <div className="border-t border-gray-700/50 pt-4 space-y-2">
                   <p className="text-sm font-semibold text-gray-300">Add player manually</p>
                   <div className="flex flex-col sm:flex-row flex-wrap gap-2">
-                    <input
-                      placeholder="Team name (must match squad)"
+                    <select
                       className="flex-1 min-w-[8rem] bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
                       value={ppManual.teamName}
                       onChange={(e) => setPpManual((x) => ({ ...x, teamName: e.target.value }))}
-                    />
+                    >
+                      <option value="">Select team</option>
+                      {ppTeamOptions.map((team) => (
+                        <option key={team} value={team}>
+                          {team}
+                        </option>
+                      ))}
+                    </select>
                     <input
                       placeholder="Player name"
                       className="flex-1 min-w-[8rem] bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
@@ -2363,12 +2417,18 @@ export default function AdminPage() {
               <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-6 space-y-4">
                 <h3 className="font-bold text-lg">Create market</h3>
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <input
-                    placeholder="Team name"
+                  <select
                     className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
                     value={ppForm.teamName}
                     onChange={(e) => setPpForm((f) => ({ ...f, teamName: e.target.value }))}
-                  />
+                  >
+                    <option value="">Select team</option>
+                    {ppTeamOptions.map((team) => (
+                      <option key={team} value={team}>
+                        {team}
+                      </option>
+                    ))}
+                  </select>
                   <input
                     placeholder="Player name (exact)"
                     className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
@@ -2385,9 +2445,26 @@ export default function AdminPage() {
                     <option value="runs">Runs (batting)</option>
                     <option value="wickets">Wickets (bowling)</option>
                   </select>
+                  <select
+                    className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={`${ppForm.condition}-${ppForm.threshold}`}
+                    onChange={(e) => {
+                      const [condition, threshold] = e.target.value.split('-');
+                      setPpForm((f) => ({
+                        ...f,
+                        condition: condition as 'more_than' | 'less_than',
+                        threshold,
+                      }));
+                    }}
+                  >
+                    <option value="less_than-20">Less than 20</option>
+                    <option value="less_than-30">Less than 30</option>
+                    <option value="more_than-20">More than 20</option>
+                    <option value="more_than-30">More than 30</option>
+                  </select>
                   <input
                     type="number"
-                    placeholder="Threshold (e.g. 50 runs, 3 wickets)"
+                    placeholder="Custom threshold"
                     className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
                     value={ppForm.threshold}
                     onChange={(e) => setPpForm((f) => ({ ...f, threshold: e.target.value }))}
@@ -2424,6 +2501,7 @@ export default function AdminPage() {
                       teamName: ppForm.teamName.trim(),
                       playerName: ppForm.playerName.trim(),
                       statType: ppForm.statType,
+                      condition: ppForm.condition,
                       threshold: Number(ppForm.threshold),
                       multiplier: Number(ppForm.multiplier),
                       isPublished: ppForm.isPublished,
@@ -2492,6 +2570,7 @@ export default function AdminPage() {
                                   teamName: string;
                                   playerName: string;
                                   statType: string;
+                                  condition?: 'more_than' | 'less_than';
                                   threshold: number;
                                   multiplier: number;
                                   isPublished: boolean;
@@ -2508,7 +2587,7 @@ export default function AdminPage() {
                           <div className="text-xs text-gray-500">{m.teamName}</div>
                         </td>
                         <td className="py-2 pr-2">
-                          {m.statType} ≥ {m.threshold}
+                          {m.statType} {m.condition === 'less_than' ? '<' : '>'} {m.threshold}
                         </td>
                         <td className="py-2 pr-2 font-mono">{m.multiplier}×</td>
                         <td className="py-2 pr-2">
