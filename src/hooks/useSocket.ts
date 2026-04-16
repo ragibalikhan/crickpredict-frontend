@@ -73,6 +73,8 @@ export type MatchBetActivity = {
     type: string;
     multiplier: number;
     createdAt?: string;
+    /** Legacy crowd sim rows — hidden in UI */
+    isSimulated?: boolean;
   }>;
 };
 

@@ -1328,7 +1328,7 @@ export default function MatchPage() {
                 {betActivity.recentBets.length === 0 ? (
                   <p className="p-6 text-center text-gray-500 text-sm">No bets yet — be the first.</p>
                 ) : (
-                  betActivity.recentBets.map((b) => {
+                  betActivity.recentBets.filter((b) => !b.isSimulated).map((b) => {
                     const isYou =
                       !!user?.id && String(b.userId) === String(user.id);
                     return (
