@@ -289,6 +289,29 @@ export default function AdminPage() {
     limit: number;
     skip: number;
   } | null>(null);
+  const [pendingBetFilters, setPendingBetFilters] = useState({
+    type: 'all',
+    matchId: '',
+    q: '',
+    limit: '200',
+    skip: '0',
+  });
+  const [pendingBetsData, setPendingBetsData] = useState<{
+    items: Array<{
+      id: string;
+      type: string;
+      predictionValue: string;
+      amountStaked: number;
+      multiplier: number;
+      createdAt?: string;
+      user: { id: string; username: string; email: string } | null;
+      match: { id: string; teamA: string; teamB: string; status: string } | null;
+    }>;
+    limit: number;
+    skip: number;
+    count: number;
+  } | null>(null);
+  const [selectedPendingBetIds, setSelectedPendingBetIds] = useState<string[]>([]);
 
   const headers = useMemo(
     () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
@@ -503,6 +526,21 @@ export default function AdminPage() {
     if (res.ok) setVisitData(await res.json());
   }, [adminFetch, headers, visitFilters]);
 
+  const fetchPendingBets = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (pendingBetFilters.type && pendingBetFilters.type !== 'all') params.set('type', pendingBetFilters.type);
+    if (pendingBetFilters.matchId.trim()) params.set('matchId', pendingBetFilters.matchId.trim());
+    if (pendingBetFilters.q.trim()) params.set('q', pendingBetFilters.q.trim());
+    params.set('limit', pendingBetFilters.limit || '200');
+    params.set('skip', pendingBetFilters.skip || '0');
+    const res = await adminFetch(`${API_BASE}/admin/bets/pending?${params}`, { headers });
+    if (res.ok) {
+      const d = await res.json();
+      setPendingBetsData(d);
+      setSelectedPendingBetIds((prev) => prev.filter((id) => (d.items || []).some((x: { id: string }) => x.id === id)));
+    }
+  }, [adminFetch, headers, pendingBetFilters]);
+
   const fetchPpMatches = useCallback(async () => {
     const res = await fetch(`${API_BASE}/matches`);
     if (res.ok) {
@@ -602,6 +640,7 @@ export default function AdminPage() {
     if (activeTab === 'playerProps') {
       fetchPpMatches();
       fetchPpSettlementHealth();
+      fetchPendingBets();
       if (ppMatchId) loadPlayerPropsDetail(ppMatchId);
     }
     if (activeTab === 'overview') {
@@ -632,6 +671,7 @@ export default function AdminPage() {
     fetchBrandingSettings,
     fetchPpMatches,
     fetchPpSettlementHealth,
+    fetchPendingBets,
     loadPlayerPropsDetail,
     ppMatchId,
     fetchOnlineAnalytics,
@@ -1144,6 +1184,37 @@ export default function AdminPage() {
       showToast(notifyForm.userId ? 'Notification sent to user' : 'Broadcast sent to all users!');
       setNotifyForm({ title: '', message: '', type: 'info', userId: '' });
     } else showToast('Failed to send', 'error');
+    setActionLoading(null);
+  };
+
+  const settleSelectedPendingBets = async (isWon: boolean) => {
+    if (selectedPendingBetIds.length === 0) {
+      showToast('Select at least one pending bet', 'error');
+      return;
+    }
+    const ok = confirm(
+      `Settle ${selectedPendingBetIds.length} selected pending bet(s) as ${isWon ? 'WIN' : 'LOSS'}?`,
+    );
+    if (!ok) return;
+    setActionLoading(isWon ? 'settlePendingWin' : 'settlePendingLoss');
+    const res = await adminFetch(`${API_BASE}/admin/bets/settle-bulk`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        predictionIds: selectedPendingBetIds,
+        isWon,
+      }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) {
+      showToast(`Bulk settle done: settled ${d.settled ?? 0}, skipped ${d.skipped ?? 0}`);
+      setSelectedPendingBetIds([]);
+      fetchPendingBets();
+      fetchMatchBetting();
+      fetchStats();
+    } else {
+      showToast(d?.message || 'Bulk settle failed', 'error');
+    }
     setActionLoading(null);
   };
 
@@ -2523,6 +2594,7 @@ export default function AdminPage() {
                 onClick={() => {
                   fetchPpMatches();
                   fetchPpSettlementHealth();
+                  fetchPendingBets();
                   if (ppMatchId) loadPlayerPropsDetail(ppMatchId);
                 }}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm"
@@ -2536,6 +2608,171 @@ export default function AdminPage() {
               and a match <code className="text-indigo-300">externalId</code>), then create runs/wickets markets and toggle
               visibility for users. Completed matches with pending props auto-retry settlement from the scorecard in the background.
             </p>
+
+            <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-5 space-y-4">
+              <div className="flex flex-wrap justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-lg">Manual pending-bet settlement</h3>
+                  <p className="text-xs text-gray-500">Filter by bet type / match / bet-on text, then settle selected bets in one click.</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fetchPendingBets()}
+                    className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs"
+                  >
+                    ↻ Refresh list
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Bet type</label>
+                  <select
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={pendingBetFilters.type}
+                    onChange={(e) => setPendingBetFilters((f) => ({ ...f, type: e.target.value }))}
+                  >
+                    <option value="all">All</option>
+                    <option value="ball">Ball</option>
+                    <option value="over">Over</option>
+                    <option value="batsman">Batsman</option>
+                    <option value="player_prop">Player prop</option>
+                    <option value="toss">Toss</option>
+                    <option value="team_vs_team">Team vs Team</option>
+                    <option value="match_winner">Match winner</option>
+                    <option value="live_match_winner">Live match winner</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Match</label>
+                  <select
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={pendingBetFilters.matchId}
+                    onChange={(e) => setPendingBetFilters((f) => ({ ...f, matchId: e.target.value }))}
+                  >
+                    <option value="">All matches</option>
+                    {ppMatches.map((m) => (
+                      <option key={m._id} value={m._id}>
+                        {m.teamA} vs {m.teamB}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Bet on / user search</label>
+                  <input
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    placeholder="e.g. Kohli, wicket, user email"
+                    value={pendingBetFilters.q}
+                    onChange={(e) => setPendingBetFilters((f) => ({ ...f, q: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Limit</label>
+                  <input
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm"
+                    value={pendingBetFilters.limit}
+                    onChange={(e) => setPendingBetFilters((f) => ({ ...f, limit: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => fetchPendingBets()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-semibold"
+                >
+                  Apply filters
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedPendingBetIds(
+                      pendingBetsData?.items.map((x) => x.id) || [],
+                    )
+                  }
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm"
+                >
+                  Select all shown
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPendingBetIds([])}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm"
+                >
+                  Clear selection
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading === 'settlePendingWin'}
+                  onClick={() => settleSelectedPendingBets(true)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold disabled:opacity-50"
+                >
+                  {actionLoading === 'settlePendingWin' ? 'Settling…' : `Settle WIN (${selectedPendingBetIds.length})`}
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading === 'settlePendingLoss'}
+                  onClick={() => settleSelectedPendingBets(false)}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 rounded-xl text-sm font-semibold disabled:opacity-50"
+                >
+                  {actionLoading === 'settlePendingLoss' ? 'Settling…' : `Settle LOSS (${selectedPendingBetIds.length})`}
+                </button>
+              </div>
+
+              <div className="overflow-x-auto -mx-1">
+                <table className="w-full text-xs min-w-[980px] text-left">
+                  <thead>
+                    <tr className="text-gray-500 border-b border-gray-700/70">
+                      <th className="py-2 pr-2">Sel</th>
+                      <th className="py-2 pr-2">Type</th>
+                      <th className="py-2 pr-2">Bet on</th>
+                      <th className="py-2 pr-2">User</th>
+                      <th className="py-2 pr-2">Match</th>
+                      <th className="py-2 pr-2">Stake</th>
+                      <th className="py-2 pr-2">×</th>
+                      <th className="py-2">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(pendingBetsData?.items || []).map((row) => (
+                      <tr key={row.id} className="border-b border-gray-800/80 text-gray-200">
+                        <td className="py-2 pr-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedPendingBetIds.includes(row.id)}
+                            onChange={(e) =>
+                              setSelectedPendingBetIds((prev) =>
+                                e.target.checked ? [...prev, row.id] : prev.filter((x) => x !== row.id),
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="py-2 pr-2 uppercase">{row.type}</td>
+                        <td className="py-2 pr-2">{row.predictionValue || '—'}</td>
+                        <td className="py-2 pr-2">
+                          <div>{row.user?.username || 'Unknown'}</div>
+                          <div className="text-[10px] text-gray-500">{row.user?.email || ''}</div>
+                        </td>
+                        <td className="py-2 pr-2">
+                          {row.match ? `${row.match.teamA} vs ${row.match.teamB}` : '—'}
+                          <div className="text-[10px] text-gray-500">{row.match?.status || ''}</div>
+                        </td>
+                        <td className="py-2 pr-2 tabular-nums">{formatInr(row.amountStaked)}</td>
+                        <td className="py-2 pr-2 tabular-nums">{row.multiplier}×</td>
+                        <td className="py-2 text-gray-400">{row.createdAt ? new Date(row.createdAt).toLocaleString() : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {pendingBetsData && pendingBetsData.items.length === 0 && (
+                  <p className="text-sm text-gray-500 py-3">No pending bets match the current filters.</p>
+                )}
+              </div>
+            </div>
 
             {ppSettlementStatus && ppSettlementStatus.pendingMatches > 0 && (
               <div className="rounded-2xl border border-amber-500/35 bg-amber-950/25 p-5 text-sm">
